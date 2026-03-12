@@ -38,9 +38,27 @@ Go to **Settings > Models > MCP Servers** and add a new `command` server:
 
 ---
 
-### Local Development (Experimental)
-If you are developing this server locally, use the direct path to your build:
-`node /absolute/path/to/ararahq-mcp/build/index.js`
+## 🐳 Docker & Hosting (SSE Mode)
+
+O repositório está pronto para rodar como um servidor na nuvem (ex: `mcp.ararahq.com`).
+
+```bash
+# 1. Build da imagem
+docker build -t ararahq-mcp .
+
+# 2. Rodar como Servidor (SSE)
+# O container detecta a variável PORT automaticamente
+docker run -p 3000:3000 -e PORT=3000 ararahq-mcp
+```
+
+### Rodar Localmente (Desenvolvimento)
+Se você está desenvolvendo ou quer testar o modo servidor sem Docker:
+```bash
+npm run build
+node build/index.js --transport sse
+```
+
+---
 
 ## Usage Examples
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import express from "express";
+import cors from "cors";
 import { z } from "zod";
 import axios from "axios";
 import dotenv from "dotenv";
@@ -332,13 +335,44 @@ server.tool(
 
 // --- START SERVER ---
 async function run() {
-  const transport = new StdioServerTransport();
-  try {
-    await server.connect(transport);
-    console.error("Arara Revenue OS MCP Server running on stdio");
-  } catch (error) {
-    if (!(error instanceof Error && error.message.includes("Already connected"))) {
-      throw error;
+  const transportFlag = process.argv.includes("--transport") ? process.argv[process.argv.indexOf("--transport") + 1] : null;
+  const transportEnv = process.env.MCP_TRANSPORT;
+  
+  // Use SSE if explicitly requested OR if running in a cloud environment (PORT defined)
+  const isSSE = transportFlag === "sse" || transportEnv === "sse" || (process.env.PORT !== undefined && transportFlag !== "stdio");
+
+  if (isSSE) {
+    const app = express();
+    app.use(cors());
+
+    let transport: SSEServerTransport | null = null;
+
+    app.get("/sse", async (req, res) => {
+      transport = new SSEServerTransport("/messages", res);
+      await server.connect(transport);
+    });
+
+    app.post("/messages", async (req, res) => {
+      if (transport) {
+        await transport.handlePostMessage(req, res);
+      } else {
+        res.status(400).send("No active SSE session");
+      }
+    });
+
+    const port = process.env.PORT || 3000;
+    app.listen(port, () => {
+      console.error(`Arara Revenue OS MCP Server running on SSE at http://localhost:${port}`);
+    });
+  } else {
+    const transport = new StdioServerTransport();
+    try {
+      await server.connect(transport);
+      console.error("Arara Revenue OS MCP Server running on stdio");
+    } catch (error) {
+      if (!(error instanceof Error && error.message.includes("Already connected"))) {
+        throw error;
+      }
     }
   }
 }
