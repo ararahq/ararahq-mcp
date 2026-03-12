@@ -6,10 +6,8 @@ import axios from "axios";
 import dotenv from "dotenv";
 import fs from "fs-extra";
 import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Smithery scans are often done in environments where import.meta might not be available
+// We remove the unused __filename/__dirname to prevent build errors.
 
 dotenv.config();
 
@@ -339,7 +337,19 @@ async function run() {
   console.error("Arara Revenue OS MCP Server running on stdio");
 }
 
-run().catch((error) => {
-  console.error("Fatal error running server:", error);
-  process.exit(1);
-});
+/**
+ * createSandboxServer is used by Smithery to scan the server capabilities
+ * without actually starting the stdio transport.
+ */
+export function createSandboxServer() {
+  return server;
+}
+
+// Only run the server if this file is executed directly.
+// Smithery and other scanners will import the file and use createSandboxServer instead.
+if (process.env.NODE_ENV !== "test" && !process.argv.includes("--scan")) {
+  run().catch((error) => {
+    console.error("Fatal error running server:", error);
+    process.exit(1);
+  });
+}
