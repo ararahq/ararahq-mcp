@@ -333,8 +333,14 @@ server.tool(
 // --- START SERVER ---
 async function run() {
   const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Arara Revenue OS MCP Server running on stdio");
+  try {
+    await server.connect(transport);
+    console.error("Arara Revenue OS MCP Server running on stdio");
+  } catch (error) {
+    if (!(error instanceof Error && error.message.includes("Already connected"))) {
+      throw error;
+    }
+  }
 }
 
 /**
@@ -345,9 +351,15 @@ export function createSandboxServer() {
   return server;
 }
 
-// Only run the server if this file is executed directly.
-// Smithery and other scanners will import the file and use createSandboxServer instead.
-if (process.env.NODE_ENV !== "test" && !process.argv.includes("--scan")) {
+// Smithery specifically looks for createSandboxServer but also imports the file.
+// We must avoid running connect() during a scan. 
+// We check for several common scan indicators.
+const isScan = 
+  process.argv.includes("--scan") || 
+  process.argv.some(arg => arg.includes("smithery")) ||
+  process.env.SMITHERY === "true";
+
+if (process.env.NODE_ENV !== "test" && !isScan) {
   run().catch((error) => {
     console.error("Fatal error running server:", error);
     process.exit(1);
