@@ -1,0 +1,272 @@
+#!/usr/bin/env node
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+import axios from "axios";
+import dotenv from "dotenv";
+import fs from "fs-extra";
+import path from "path";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config();
+/**
+ * Arara Universal MCP Server
+ * Transforming WhatsApp into a Revenue Operating System.
+ */
+const server = new McpServer({
+    name: "arara-revenue-os",
+    version: "1.0.0",
+});
+// --- HELPER: Guardian Mode (Brand Safety Filter) ---
+const guardianFilter = (text) => {
+    const sensitivePatterns = [
+        /password/i, /senha/i, /credit card/i, /cartão de crédito/i,
+        /cpf/i, /cnpj/i, /cvv/i
+    ];
+    for (const pattern of sensitivePatterns) {
+        if (pattern.test(text)) {
+            return { safe: false, reason: `Sensitive data detected (Guardian Intercept: ${pattern})` };
+        }
+    }
+    // Custom tone/policy checks can be added here
+    return { safe: true };
+};
+// --- TOOL: Smart Message Sending ---
+server.tool("send_smart_message", {
+    apiKey: z.string().optional().describe("Arara API Key (optional if ARARA_API_KEY env is set)"),
+    to: z.string().describe("Recipient phone number (E.164 format)"),
+    text: z.string().describe("Message content"),
+    skipGuardian: z.boolean().optional().default(false).describe("Explicitly skip safety filter (not recommended)")
+}, async ({ apiKey, to, text, skipGuardian }) => {
+    const activeKey = apiKey || process.env.ARARA_API_KEY;
+    if (!activeKey) {
+        return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+    }
+    if (!skipGuardian) {
+        const check = guardianFilter(text);
+        if (!check.safe) {
+            return {
+                content: [{ type: "text", text: `🚨 GUARDIAN MODE INTERCEPTED: ${check.reason}` }],
+                isError: true
+            };
+        }
+    }
+    try {
+        // PROD API URL: https://api.ararahq.com/api/v1/messages
+        const response = await axios.post("https://api.ararahq.com/api/v1/messages", { receiver: to, body: text }, { headers: { Authorization: `Bearer ${activeKey}` } });
+        return {
+            content: [{ type: "text", text: `✅ Message sent successfully. ID: ${response.data.id}` }]
+        };
+    }
+    catch (error) {
+        const errorMessage = error.response?.data?.message || error.message;
+        return {
+            content: [{ type: "text", text: `❌ Failure sending message: ${errorMessage}` }],
+            isError: true
+        };
+    }
+});
+// --- TOOL: Atomic Negotiation (Link Generation) ---
+server.tool("generate_negotiation_link", {
+    abacateApiKey: z.string().optional().describe("AbacatePay API Key (optional if ABACATE_API_KEY env is set)"),
+    amount: z.number().describe("Total amount in cents (R$ 10,00 = 1000)"),
+    customerId: z.string().describe("Customer ID or Email"),
+    reason: z.string().describe("Reason for this specific payment link")
+}, async ({ abacateApiKey, amount, customerId, reason }) => {
+    const activeKey = abacateApiKey || process.env.ABACATE_API_KEY;
+    if (!activeKey) {
+        return { content: [{ type: "text", text: "❌ Missing AbacatePay API Key." }], isError: true };
+    }
+    try {
+        // Generic call to AbacatePay to create a checkout/payment link
+        const response = await axios.post("https://api.abacatepay.com/v1/checkout", { amount, customerId, metadata: { reason } }, { headers: { Authorization: `Bearer ${activeKey}` } });
+        return {
+            content: [{ type: "text", text: `🔗 Negotiation link generated: ${response.data.url}\nContext: ${reason}` }]
+        };
+    }
+    catch (error) {
+        return {
+            content: [{ type: "text", text: `❌ Failed to generate link: ${error.message}` }],
+            isError: true
+        };
+    }
+});
+// --- TOOL: Business Memory Retrieval ---
+server.tool("get_customer_memory", {
+    apiKey: z.string().optional().describe("Arara/Business Memory API Key (optional if ARARA_API_KEY env is set)"),
+    customerId: z.string().describe("Phone or Internal ID")
+}, async ({ apiKey, customerId }) => {
+    const activeKey = apiKey || process.env.ARARA_API_KEY;
+    if (!activeKey) {
+        return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+    }
+    // This tool simulates fetching vectorized 'mood' and context history.
+    // In a real implementation, this would query a Vector DB via Arara's backend.
+    return {
+        content: [{
+                type: "text",
+                text: `🧠 MEMORY LAYER (MOCK): Customer ${customerId} has a VIP status. Last mood: HAPPY. History shows preference for morning contact.`
+            }]
+    };
+});
+// --- TOOL: List Arara Templates ---
+server.tool("list_templates", {
+    apiKey: z.string().optional().describe("Arara API Key (optional if ARARA_API_KEY env is set)")
+}, async ({ apiKey }) => {
+    const activeKey = apiKey || process.env.ARARA_API_KEY;
+    if (!activeKey) {
+        return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+    }
+    try {
+        const response = await axios.get("https://api.ararahq.com/api/v1/templates", { headers: { Authorization: `Bearer ${activeKey}` } });
+        const templates = response.data.map((t) => ({
+            id: t.id,
+            name: t.name,
+            status: t.status,
+            category: t.category,
+            content: t.content
+        }));
+        return {
+            content: [{ type: "text", text: `📋 Available Templates:\n${JSON.stringify(templates, null, 2)}` }]
+        };
+    }
+    catch (error) {
+        return {
+            content: [{ type: "text", text: `❌ Failed to list templates: ${error.message}` }],
+            isError: true
+        };
+    }
+});
+// --- TOOL: Send Template Message (Mass Orchestration Ready) ---
+server.tool("send_template_message", {
+    apiKey: z.string().optional().describe("Arara API Key (optional if ARARA_API_KEY env is set)"),
+    to: z.string().describe("Recipient phone number"),
+    templateName: z.string().describe("Name of the Arara template"),
+    variables: z.array(z.string()).optional().describe("Variables for the template")
+}, async ({ apiKey, to, templateName, variables }) => {
+    const activeKey = apiKey || process.env.ARARA_API_KEY;
+    if (!activeKey) {
+        return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+    }
+    try {
+        const response = await axios.post("https://api.ararahq.com/api/v1/messages", {
+            receiver: to,
+            templateName,
+            variables: variables || []
+        }, { headers: { Authorization: `Bearer ${activeKey}` } });
+        return {
+            content: [{ type: "text", text: `🚀 Template message sent! ID: ${response.data.id}` }]
+        };
+    }
+    catch (error) {
+        const errorMessage = error.response?.data?.message || error.message;
+        return {
+            content: [{ type: "text", text: `❌ Template error: ${errorMessage}` }],
+            isError: true
+        };
+    }
+});
+// --- TOOL: Create Arara Campaign (Mass Orchestration) ---
+server.tool("create_campaign", {
+    apiKey: z.string().optional().describe("Arara API Key (optional if ARARA_API_KEY env is set)"),
+    name: z.string().describe("Campaign name"),
+    templateName: z.string().describe("Arara template to use"),
+    idempotencyKey: z.string().describe("Unique key to prevent duplicate campaigns"),
+    csvUrl: z.string().optional().describe("URL of the CSV with recipients and variables")
+}, async ({ apiKey, name, templateName, idempotencyKey, csvUrl }) => {
+    const activeKey = apiKey || process.env.ARARA_API_KEY;
+    if (!activeKey) {
+        return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+    }
+    try {
+        const response = await axios.post("https://api.ararahq.com/api/v1/campaigns", { name, templateName, csvUrl }, {
+            headers: {
+                Authorization: `Bearer ${activeKey}`,
+                "Idempotency-Key": idempotencyKey
+            }
+        });
+        return {
+            content: [{ type: "text", text: `📢 Campaign '${name}' created! ID: ${response.data.id}` }]
+        };
+    }
+    catch (error) {
+        const errorMessage = error.response?.data?.message || error.message;
+        return {
+            content: [{ type: "text", text: `❌ Campaign error: ${errorMessage}` }],
+            isError: true
+        };
+    }
+});
+// --- TOOL: Monitor Revenue Leaks (Autonomous OS) ---
+server.tool("monitor_revenue_leaks", {
+    abacateApiKey: z.string().optional().describe("AbacatePay API Key (optional if ABACATE_API_KEY env is set)"),
+    thresholdDays: z.number().optional().default(1).describe("Days since payment expiration")
+}, async ({ abacateApiKey, thresholdDays }) => {
+    const activeKey = abacateApiKey || process.env.ABACATE_API_KEY;
+    if (!activeKey) {
+        return { content: [{ type: "text", text: "❌ Missing AbacatePay API Key." }], isError: true };
+    }
+    // This is a specialized tool for the 'Autonomous Revenue Recovery' vision.
+    // It would normally query AbacatePay's billing history to find failed/expired payments.
+    return {
+        content: [{
+                type: "text",
+                text: `💸 LEAK DETECTION (MOCK): Found 3 expired Pix payments from the last ${thresholdDays} day(s). Total: R$ 450,00. Ready for recovery.`
+            }]
+    };
+});
+// --- TOOL: Configure Credentials (Auto-Setup) ---
+server.tool("configure_credentials", {
+    araraApiKey: z.string().optional().describe("Arara API Key"),
+    abacateApiKey: z.string().optional().describe("AbacatePay API Key")
+}, async ({ araraApiKey, abacateApiKey }) => {
+    try {
+        const envPath = path.join(process.cwd(), ".env");
+        let envContent = "";
+        if (await fs.pathExists(envPath)) {
+            envContent = await fs.readFile(envPath, "utf-8");
+        }
+        const updates = {
+            ARARA_API_KEY: araraApiKey,
+            ABACATE_API_KEY: abacateApiKey
+        };
+        let lines = envContent.split("\n");
+        for (const [key, value] of Object.entries(updates)) {
+            if (!value)
+                continue;
+            const lineIndex = lines.findIndex(line => line.startsWith(`${key}=`));
+            if (lineIndex !== -1) {
+                lines[lineIndex] = `${key}=${value}`;
+            }
+            else {
+                lines.push(`${key}=${value}`);
+            }
+        }
+        await fs.writeFile(envPath, lines.join("\n").trim() + "\n");
+        // Reload environment variables for the current session
+        if (araraApiKey)
+            process.env.ARARA_API_KEY = araraApiKey;
+        if (abacateApiKey)
+            process.env.ABACATE_API_KEY = abacateApiKey;
+        return {
+            content: [{ type: "text", text: "✅ Credentials configured successfully and saved to .env file." }]
+        };
+    }
+    catch (error) {
+        return {
+            content: [{ type: "text", text: `❌ Failed to save credentials: ${error.message}` }],
+            isError: true
+        };
+    }
+});
+// --- START SERVER ---
+async function run() {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("Arara Revenue OS MCP Server running on stdio");
+}
+run().catch((error) => {
+    console.error("Fatal error running server:", error);
+    process.exit(1);
+});

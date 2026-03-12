@@ -1,0 +1,30 @@
+{
+  "name": "ararahq-mcp",
+  "version": "1.0.1",
+  "description": "Universal Arara Revenue Operating System MCP",
+  "main": "build/index.js",
+  "bin": {
+    "ararahq-mcp": "build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.1",
+    "axios": "^1.6.7",
+    "dotenv": "^17.3.1",
+    "fs-extra": "^11.3.4",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.11.19",
+    "typescript": "^5.3.3"
+  }
+}
