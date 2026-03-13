@@ -140,68 +140,89 @@ async function run() {
       });
     });
 
-    // NEW PATH: /connect (Avoids WAF filters for /sse)
-    app.get("/connect", async (req, res) => {
-      console.error(`[SSE GET] Connecting via /connect: ${req.url}`);
-      
-      const sessionId = getDeterministicSessionId(req);
-      if (!sessionId) {
-        console.error("[SSE ERROR] No token in /connect");
-        return res.status(401).send("Auth Required");
-      }
+    const handleConnect = async (req: express.Request, res: express.Response) => {
+      try {
+        console.error(`[SSE DEBUG] Initializing session via ${req.method}`);
 
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('X-Accel-Buffering', 'no');
-      
-      res.write(":" + " ".repeat(2048) + "\n\n");
-      res.write("event: endpoint\ndata: \"/messages?sessionId=" + sessionId + "\"\n\n");
+        const transport = new SSEServerTransport("/messages", res);
+        const sessionId = transport.sessionId; // Let SDK decide the ID
 
-      const transport = new SSEServerTransport("/messages", res);
-      (transport as any).sessionId = sessionId; // Force Sync
+        transports.set(sessionId, transport);
+        console.error(`[SSE Session] Established: ${sessionId}`);
 
-      transports.set(sessionId, transport);
-      console.error(`[SSE Session] Established: ${sessionId}`);
+        // Capture Tokens using this sessionId
+        const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
+        const abacateToken = (req.headers['x-abacate-key'] as string);
+        if (araraToken) sessionKeysArara.set(sessionId, araraToken.toString().replace(/^Bearer\s+/i, '').trim());
+        if (abacateToken) sessionKeysAbacate.set(sessionId, abacateToken.toString().replace(/^Bearer\s+/i, '').trim());
 
-      // Capture Tokens
-      const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
-      const abacateToken = (req.headers['x-abacate-key'] as string);
-      if (araraToken) sessionKeysArara.set(sessionId, araraToken.toString().replace(/^Bearer\s+/i, '').trim());
-      if (abacateToken) sessionKeysAbacate.set(sessionId, abacateToken.toString().replace(/^Bearer\s+/i, '').trim());
-
-      await server.connect(transport);
-      
-      res.on("close", () => {
-        console.error(`[SSE CLOSE] Session ${sessionId}`);
-        transports.delete(sessionId);
-        sessionKeysArara.delete(sessionId);
-        sessionKeysAbacate.delete(sessionId);
-      });
-    });
-
-    // Redir legacy
-    app.get("/sse", (req, res) => res.redirect(307, "/connect"));
-
-    app.post("/messages", async (req, res) => {
-      const sessionId = (req.query.sessionId as string) || getDeterministicSessionId(req);
-      console.error(`[SSE POST] Recv for ${sessionId}`);
-
-      const transport = transports.get(sessionId || "");
-      if (transport) {
-        await sessionContext.run({ sessionId: sessionId! }, async () => {
-          await transport.handlePostMessage(req, res, req.body);
+        console.error(`[SSE DEBUG] Connecting server to transport for ${sessionId}`);
+        
+        // NOTE: McpServer (v1.x) typically supports only one active transport.
+        // If this is a shared server, you may see "Already connected" errors
+        // for concurrent sessions. This is a limitation of the current SDK usage.
+        await server.connect(transport);
+        
+        console.error(`[SSE DEBUG] Server connected to transport for ${sessionId}`);
+        
+        res.on("close", () => {
+          console.error(`[SSE CLOSE] Session ${sessionId}`);
+          transports.delete(sessionId);
+          sessionKeysArara.delete(sessionId);
+          sessionKeysAbacate.delete(sessionId);
         });
-      } else {
-        console.error(`[SSE POST ERROR] Session ${sessionId} not active. Active: [${Array.from(transports.keys()).join(",")}]`);
-        res.status(400).send("Session Missing. Open GET /connect first.");
+      } catch (error: any) {
+        console.error(`[SSE FATAL ERROR] in handleConnect: ${error.message}`);
+        if (!res.headersSent) {
+          res.status(500).send(`Server Error: ${error.message}`);
+        }
       }
+    };
+
+    const handleMessage = async (req: express.Request, res: express.Response) => {
+      try {
+        const sessionId = (req.query.sessionId as string) || getDeterministicSessionId(req);
+        console.error(`[SSE POST] Recv for ${sessionId}`);
+
+        const transport = transports.get(sessionId || "");
+        if (transport) {
+          await sessionContext.run({ sessionId: sessionId! }, async () => {
+            await transport.handlePostMessage(req, res, req.body);
+          });
+        } else {
+          console.error(`[SSE POST ERROR] Session ${sessionId} not active. Active: [${Array.from(transports.keys()).join(",")}]`);
+          // FALLBACK: If sessionId is a deterministic ID but map is keyed by SDK ID, this might fail.
+          // But since the client gets the SD ID in the /messages?sessionId= URL, it should work.
+          res.status(400).send("Session Missing. Open GET /connect first.");
+        }
+      } catch (error: any) {
+        console.error(`[SSE FATAL ERROR] in handleMessage: ${error.message}`, error.stack);
+        if (!res.headersSent) res.status(500).send("Internal Server Error");
+      }
+    };
+
+    // NEW PATH: /connect (Avoids WAF filters for /sse)
+    app.all("/connect", (req, res) => { handleConnect(req, res); });
+
+    // Redir legacy or handle POST init
+    app.all("/sse", (req, res) => {
+      const isSSEInit = req.headers.accept?.includes("text/event-stream");
+      
+      if (req.method === "GET") {
+        return res.redirect(307, "/connect");
+      }
+
+      if (req.method === "POST" && isSSEInit) {
+        console.error("[SSE REDIR] POST /sse with event-stream -> handleConnect");
+        return handleConnect(req, res);
+      }
+
+      // Default: POST messages
+      console.error("[SSE REDIR] POST /sse -> handleMessage");
+      return handleMessage(req, res);
     });
 
-    app.post("/sse", (req, res) => {
-      req.url = "/messages";
-      (app as any).handle(req, res);
-    });
+    app.post("/messages", (req, res) => { handleMessage(req, res); });
 
     const port = process.env.PORT || 3333;
     app.listen(port, () => {
