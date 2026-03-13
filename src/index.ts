@@ -13,7 +13,8 @@ import { AsyncLocalStorage } from "async_hooks";
 
 // --- CONTEXT ---
 const sessionContext = new AsyncLocalStorage<{ sessionId: string }>();
-const sessionKeys = new Map<string, string>();
+const sessionKeysArara = new Map<string, string>();
+const sessionKeysAbacate = new Map<string, string>();
 // Smithery scans are often done in environments where import.meta might not be available
 // We remove the unused __filename/__dirname to prevent build errors.
 
@@ -35,16 +36,18 @@ const IS_SHARED_MODE = !(process.env.ARARA_API_KEY || process.env.ABACATE_API_KE
 // --- HELPERS ---
 const getSessionKey = (apiKey?: string): string | undefined => {
   const context = sessionContext.getStore();
-  const sessionKey = context ? sessionKeys.get(context.sessionId) : undefined;
+  const sessionKey = context ? sessionKeysArara.get(context.sessionId) : undefined;
   
   // Priority: 1. Tool Param, 2. Session Header, 3. Env Var
   return apiKey || sessionKey || process.env.ARARA_API_KEY;
 };
 
 const getAbacateSessionKey = (apiKey?: string): string | undefined => {
-  // Currently we use the same key for both or separate them if needed. 
-  // For now, priority is Param > Env.
-  return apiKey || process.env.ABACATE_API_KEY;
+  const context = sessionContext.getStore();
+  // Checks X-Abacate-Key first, then X-Arara-Key as fallback for Revenue OS keys
+  const abacateKey = context ? (sessionKeysAbacate.get(context.sessionId) || sessionKeysArara.get(context.sessionId)) : undefined;
+
+  return apiKey || abacateKey || process.env.ABACATE_API_KEY;
 };
 
 // --- GUARDIAN MODE ---
@@ -405,25 +408,32 @@ async function run() {
     const transports = new Map<string, SSEServerTransport>();
 
     app.get("/sse", async (req, res) => {
-      // Priority: X-Arara-Key Header > Authorization Header > Query Param
-      const authHeader = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
+      // Priority: Custom Headers > Authorization Header > Query Param
+      const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
+      const abacateToken = (req.headers['x-abacate-key'] as string);
+      
       const transport = new SSEServerTransport("/messages", res);
       
       const sessionId = (transport as any).sessionId || Math.random().toString(36).substring(7);
       transports.set(sessionId, transport);
 
-      if (authHeader) {
-        // Handle both "Bearer <token>" and raw token from query
-        const token = authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : authHeader;
-        sessionKeys.set(sessionId, token);
-        console.error(`[Session ${sessionId}] Authenticated with ${req.headers.authorization ? 'Header' : 'Query'} Token`);
+      if (araraToken) {
+        const token = araraToken.startsWith("Bearer ") ? araraToken.split(" ")[1] : araraToken;
+        sessionKeysArara.set(sessionId, token);
+      }
+      if (abacateToken) {
+        const token = abacateToken.startsWith("Bearer ") ? abacateToken.split(" ")[1] : abacateToken;
+        sessionKeysAbacate.set(sessionId, token);
       }
 
+      console.error(`[Session ${sessionId}] Authenticated [Arara: ${!!araraToken}, Abacate: ${!!abacateToken}]`);
+      
       await server.connect(transport);
       
       res.on("close", () => {
         transports.delete(sessionId);
-        sessionKeys.delete(sessionId);
+        sessionKeysArara.delete(sessionId);
+        sessionKeysAbacate.delete(sessionId);
       });
     });
 
