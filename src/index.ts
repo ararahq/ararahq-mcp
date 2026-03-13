@@ -128,12 +128,15 @@ async function run() {
     });
 
     app.get("/.well-known/mcp/server-card.json", (req, res) => {
+      console.error(`[CARD] Fetching server card from ${req.ip}`);
+      const host = req.get('host') || "mcp.ararahq.com";
+      const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
       res.json({
         mcpServers: { 
           ararahq: { 
             name: "Arara Revenue OS", 
             version: "1.1.1", 
-            url: "https://mcp.ararahq.com/connect", 
+            url: `${protocol}://${host}/connect`, 
             transport: "sse" 
           } 
         }

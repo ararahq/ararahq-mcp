@@ -1,0 +1,251 @@
+{
+  "payload": {
+    "type": "hosted",
+    "stateful": false,
+    "hasAuthAdapter": false,
+    "serverCard": {
+      "serverInfo": {
+        "name": "arara-revenue-os",
+        "version": "1.0.0"
+      },
+      "tools": [
+        {
+          "name": "send_smart_message",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "apiKey": {
+                "type": "string",
+                "description": "Arara API Key (optional if ARARA_API_KEY env is set)"
+              },
+              "to": {
+                "type": "string",
+                "description": "Recipient phone number (E.164 format)"
+              },
+              "text": {
+                "type": "string",
+                "description": "Message content"
+              },
+              "skipGuardian": {
+                "type": "boolean",
+                "default": false,
+                "description": "Explicitly skip safety filter (not recommended)"
+              }
+            },
+            "required": [
+              "to",
+              "text"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "generate_negotiation_link",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "abacateApiKey": {
+                "type": "string",
+                "description": "AbacatePay API Key (optional if ABACATE_API_KEY env is set)"
+              },
+              "amount": {
+                "type": "number",
+                "description": "Total amount in cents (R$ 10,00 = 1000)"
+              },
+              "customerId": {
+                "type": "string",
+                "description": "Customer ID or Email"
+              },
+              "reason": {
+                "type": "string",
+                "description": "Reason for this specific payment link"
+              }
+            },
+            "required": [
+              "amount",
+              "customerId",
+              "reason"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "get_customer_memory",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "apiKey": {
+                "type": "string",
+                "description": "Arara/Business Memory API Key (optional if ARARA_API_KEY env is set)"
+              },
+              "customerId": {
+                "type": "string",
+                "description": "Phone or Internal ID"
+              }
+            },
+            "required": [
+              "customerId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "list_templates",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "apiKey": {
+                "type": "string",
+                "description": "Arara API Key (optional if ARARA_API_KEY env is set)"
+              }
+            },
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "send_template_message",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "apiKey": {
+                "type": "string",
+                "description": "Arara API Key (optional if ARARA_API_KEY env is set)"
+              },
+              "to": {
+                "type": "string",
+                "description": "Recipient phone number"
+              },
+              "templateName": {
+                "type": "string",
+                "description": "Name of the Arara template"
+              },
+              "variables": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Variables for the template"
+              }
+            },
+            "required": [
+              "to",
+              "templateName"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "create_campaign",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "apiKey": {
+                "type": "string",
+                "description": "Arara API Key (optional if ARARA_API_KEY env is set)"
+              },
+              "name": {
+                "type": "string",
+                "description": "Campaign name"
+              },
+              "templateName": {
+                "type": "string",
+                "description": "Arara template to use"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "description": "Unique key to prevent duplicate campaigns"
+              },
+              "csvUrl": {
+                "type": "string",
+                "description": "URL of the CSV with recipients and variables"
+              }
+            },
+            "required": [
+              "name",
+              "templateName",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "monitor_revenue_leaks",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "abacateApiKey": {
+                "type": "string",
+                "description": "AbacatePay API Key (optional if ABACATE_API_KEY env is set)"
+              },
+              "thresholdDays": {
+                "type": "number",
+                "default": 1,
+                "description": "Days since payment expiration"
+              }
+            },
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "configure_credentials",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "araraApiKey": {
+                "type": "string",
+                "description": "Arara API Key"
+              },
+              "abacateApiKey": {
+                "type": "string",
+                "description": "AbacatePay API Key"
+              }
+            },
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        }
+      ],
+      "resources": [],
+      "prompts": []
+    },
+    "source": {
+      "commit": "9c79ec595406222869d17005568316c59444c3de",
+      "branch": "main"
+    }
+  },
+  "artifacts": {
+    "module": "module.js",
+    "sourcemap": "module.js.map"
+  }
+}
