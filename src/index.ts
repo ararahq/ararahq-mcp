@@ -17,8 +17,6 @@ import crypto from "node:crypto";
 const sessionContext = new AsyncLocalStorage<{ sessionId: string }>();
 const sessionKeysArara = new Map<string, string>();
 const sessionKeysAbacate = new Map<string, string>();
-// Smithery scans are often done in environments where import.meta might not be available
-// We remove the unused __filename/__dirname to prevent build errors.
 
 dotenv.config();
 
@@ -29,7 +27,7 @@ dotenv.config();
 
 const server = new McpServer({
   name: "arara-revenue-os",
-  version: "1.0.0",
+  version: "1.0.7",
 });
 
 // --- CONSTANTS & STATE ---
@@ -65,7 +63,6 @@ const guardianFilter = (text: string): { safe: boolean; reason?: string } => {
     }
   }
   
-  // Custom tone/policy checks can be added here
   return { safe: true };
 };
 
@@ -99,7 +96,6 @@ server.tool(
     }
 
     try {
-      // PROD API URL: https://api.ararahq.com/api/v1/messages
       const response = await axios.post(
         "https://api.ararahq.com/api/v1/messages",
         { receiver: to, body: text },
@@ -138,7 +134,6 @@ server.tool(
       };
     }
     try {
-      // Generic call to AbacatePay to create a checkout/payment link
       const response = await axios.post(
         "https://api.abacatepay.com/v1/checkout",
         { amount, customerId, metadata: { reason } },
@@ -173,8 +168,6 @@ server.tool(
         isError: true 
       };
     }
-    // This tool simulates fetching vectorized 'mood' and context history.
-    // In a real implementation, this would query a Vector DB via Arara's backend.
     return {
       content: [{ 
         type: "text", 
@@ -327,8 +320,6 @@ server.tool(
         isError: true 
       };
     }
-    // This is a specialized tool for the 'Autonomous Revenue Recovery' vision.
-    // It would normally query AbacatePay's billing history to find failed/expired payments.
     return {
       content: [{ 
         type: "text", 
@@ -379,7 +370,6 @@ server.tool(
 
       await fs.writeFile(envPath, lines.join("\n").trim() + "\n");
       
-      // Reload environment variables for the current session
       if (araraApiKey) process.env.ARARA_API_KEY = araraApiKey;
       if (abacateApiKey) process.env.ABACATE_API_KEY = abacateApiKey;
 
@@ -399,8 +389,6 @@ server.tool(
 async function run() {
   const transportFlag = process.argv.includes("--transport") ? process.argv[process.argv.indexOf("--transport") + 1] : null;
   const transportEnv = process.env.MCP_TRANSPORT;
-  
-  // Use SSE if explicitly requested OR if running in a cloud environment (PORT defined)
   const isSSE = transportFlag === "sse" || transportEnv === "sse" || (process.env.PORT !== undefined && transportFlag !== "stdio");
 
   if (isSSE) {
@@ -409,7 +397,6 @@ async function run() {
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
-    // Global logger to catch EVERYTHING
     app.use((req, res, next) => {
       console.error(`[HTTP] ${req.method} ${req.url} (IP: ${req.ip})`);
       next();
@@ -427,16 +414,15 @@ async function run() {
     };
 
     app.get("/", (req, res) => {
-      res.json({ status: "alive", mode: "SHARED", version: "1.0.6", active: transports.size });
+      res.json({ status: "alive", mode: "SHARED", version: "1.0.7", active: transports.size });
     });
 
-    // Smithery skip-scan configuration
     app.get("/.well-known/mcp/server-card.json", (req, res) => {
       res.json({
         mcpServers: {
           ararahq: {
             name: "Arara Revenue OS",
-            version: "1.0.6",
+            version: "1.0.7",
             url: "https://mcp.ararahq.com/sse",
             transport: "sse"
           }
@@ -445,28 +431,26 @@ async function run() {
     });
 
     app.get("/sse", async (req, res) => {
-      console.error(`[SSE Handshake] Incoming: ${req.method} ${req.url}`);
-      
-      // Aggressive headers to bypass ALL proxies and caches
+      console.error(`[SSE GET] Handshake: ${req.url}`);
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
       
-      const transport = new SSEServerTransport("/messages", res);
+      const transport = new SSEServerTransport("/sse", res);
       const sessionId = getDeterministicSessionId(req) || transport.sessionId;
       
       if (!sessionId) {
-        console.error("[SSE ERROR] No token provided for session context");
-        return res.status(401).send("Authentication required for SSE");
+        console.error("[SSE ERROR] No token for session");
+        return res.status(401).send("Authentication required");
       }
 
       transports.set(sessionId, transport);
-      console.error(`[SSE GET] Established Session: ${sessionId}`);
+      console.error(`[SSE Session] Established: ${sessionId}`);
 
-      // Re-capture tokens for this specific session
       const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
       const abacateToken = (req.headers['x-abacate-key'] as string);
       
@@ -482,39 +466,37 @@ async function run() {
       await server.connect(transport);
       
       res.on("close", () => {
-        console.error(`[SSE CLOSE] Session cleanup: ${sessionId}`);
+        console.error(`[SSE CLOSE] Cleanup: ${sessionId}`);
         transports.delete(sessionId);
         sessionKeysArara.delete(sessionId);
         sessionKeysAbacate.delete(sessionId);
       });
     });
 
-    app.post("/messages", async (req, res) => {
+    app.post("/sse", async (req, res) => {
       const parsedUrl = url.parse(req.url, true);
-      // Priority: URL sessionId > Deterministic SessionId (from tokens) > Body
-      const sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || getDeterministicSessionId(req) || (req.body.sessionId as string);
+      const sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || getDeterministicSessionId(req);
       
       if (!sessionId) {
-        console.error(`[POST ERROR] No session context. URL: ${req.url}`);
+        console.error(`[SSE POST ERROR] No sessionId found.`);
         return res.status(400).send("Session ID required");
       }
 
       const transport = transports.get(sessionId);
       if (transport) {
         await sessionContext.run({ sessionId }, async () => {
-          // Pass body because express.json() already consumed the stream
           await transport.handlePostMessage(req, res, req.body);
         });
       } else {
-        console.error(`[POST ERROR] Session ${sessionId} not active. Active: [${Array.from(transports.keys()).join(",")}]`);
-        res.status(400).send(`Session not found. Ensure GET /sse is open.`);
+        console.error(`[SSE POST ERROR] Session ${sessionId} not active. Active: [${Array.from(transports.keys()).join(",")}]`);
+        res.status(400).send("Session not established. Ensure GET /sse is open.");
       }
     });
 
-    // Fallback POST for legacy compatibility
-    app.post("/sse", (req, res) => {
-      // 307 preserves the POST method and body during redirect
-      res.redirect(307, "/messages");
+    // Compatibility path
+    app.post("/messages", (req, res) => {
+      req.url = "/sse";
+      (app as any).handle(req, res);
     });
 
     const port = process.env.PORT || 3333;
@@ -535,17 +517,10 @@ async function run() {
   }
 }
 
-/**
- * createSandboxServer is used by Smithery to scan the server capabilities
- * without actually starting the stdio transport.
- */
 export function createSandboxServer() {
   return server;
 }
 
-// Smithery specifically looks for createSandboxServer but also imports the file.
-// We must avoid running connect() during a scan. 
-// We check for several common scan indicators.
 const isScan = 
   process.argv.includes("--scan") || 
   process.argv.some(arg => arg.includes("smithery")) ||
