@@ -427,7 +427,7 @@ async function run() {
     };
 
     app.get("/", (req, res) => {
-      res.json({ status: "alive", mode: "SHARED", version: "1.0.5" });
+      res.json({ status: "alive", mode: "SHARED", version: "1.0.6", active: transports.size });
     });
 
     // Smithery skip-scan configuration
@@ -436,7 +436,7 @@ async function run() {
         mcpServers: {
           ararahq: {
             name: "Arara Revenue OS",
-            version: "1.0.5",
+            version: "1.0.6",
             url: "https://mcp.ararahq.com/sse",
             transport: "sse"
           }
@@ -445,8 +445,9 @@ async function run() {
     });
 
     app.get("/sse", async (req, res) => {
-      console.error(`[SSE Connection] GET ${req.url}`);
-      // Aggressive headers to bypass ALL proxies
+      console.error(`[SSE Handshake] Incoming: ${req.method} ${req.url}`);
+      
+      // Aggressive headers to bypass ALL proxies and caches
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
@@ -454,18 +455,18 @@ async function run() {
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
       
-      const transport = new SSEServerTransport("/sse", res);
-      // Use deterministic ID if possible, otherwise SDK default
+      const transport = new SSEServerTransport("/messages", res);
       const sessionId = getDeterministicSessionId(req) || transport.sessionId;
       
       if (!sessionId) {
-        console.error("[SSE] Failed to generate sessionId");
-        return res.end();
+        console.error("[SSE ERROR] No token provided for session context");
+        return res.status(401).send("Authentication required for SSE");
       }
 
       transports.set(sessionId, transport);
-      
-      // Store tokens if present, but don't fail yet if missing
+      console.error(`[SSE GET] Established Session: ${sessionId}`);
+
+      // Re-capture tokens for this specific session
       const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
       const abacateToken = (req.headers['x-abacate-key'] as string);
       
@@ -478,39 +479,42 @@ async function run() {
         sessionKeysAbacate.set(sessionId, token);
       }
 
-      console.error(`[SSE GET] Session Started: ${sessionId}`);
-      
       await server.connect(transport);
       
       res.on("close", () => {
-        console.error(`[SSE CLOSE] Session Ended: ${sessionId}`);
+        console.error(`[SSE CLOSE] Session cleanup: ${sessionId}`);
         transports.delete(sessionId);
         sessionKeysArara.delete(sessionId);
         sessionKeysAbacate.delete(sessionId);
       });
     });
 
-    app.post("/sse", async (req, res) => {
+    app.post("/messages", async (req, res) => {
       const parsedUrl = url.parse(req.url, true);
       // Priority: URL sessionId > Deterministic SessionId (from tokens) > Body
-      let sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || getDeterministicSessionId(req) || (req.body.sessionId as string);
+      const sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || getDeterministicSessionId(req) || (req.body.sessionId as string);
       
       if (!sessionId) {
-        console.error(`[SSE POST ERROR] Missing sessionId. URL: ${req.url}`);
+        console.error(`[POST ERROR] No session context. URL: ${req.url}`);
         return res.status(400).send("Session ID required");
       }
 
       const transport = transports.get(sessionId);
-
-      if (!transport) {
-        console.error(`[SSE POST ERROR] Session ${sessionId} not active. Known: [${Array.from(transports.keys()).join(",")}]`);
-        return res.status(400).send("Session not established. Ensure you connect via GET /sse first.");
+      if (transport) {
+        await sessionContext.run({ sessionId }, async () => {
+          // Pass body because express.json() already consumed the stream
+          await transport.handlePostMessage(req, res, req.body);
+        });
+      } else {
+        console.error(`[POST ERROR] Session ${sessionId} not active. Active: [${Array.from(transports.keys()).join(",")}]`);
+        res.status(400).send(`Session not found. Ensure GET /sse is open.`);
       }
+    });
 
-      await sessionContext.run({ sessionId }, async () => {
-        // Pass req.body because express.json() consumed the original stream
-        await transport.handlePostMessage(req, res, req.body);
-      });
+    // Fallback POST for legacy compatibility
+    app.post("/sse", (req, res) => {
+      // 307 preserves the POST method and body during redirect
+      res.redirect(307, "/messages");
     });
 
     const port = process.env.PORT || 3333;
