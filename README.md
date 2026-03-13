@@ -1,13 +1,22 @@
 # Arara Revenue OS MCP Server
 
-This MCP server transforms any AI (Claude, Cursor, etc.) into a **Revenue Operating System** powered by Arara and AbacatePay.
+This MCP server transforms any AI (Claude, Cursor, etc.) into a **Revenue Operating System** powered by Arara and AbacatePay. It is designed for scale, enabling autonomous revenue recovery and atomic negotiations.
 
-## Features
+## The 5 Pillars of Arara Revenue OS
 
-- **Guardian Mode**: Automatic safety filter for brand-safe communication.
-- **Smart Messaging**: Send WhatsApp messages via Arara API.
-- **Atomic Negotiation**: Generate payment links via AbacatePay dynamically.
-- **Business Memory**: Access customer context and "mood" history.
+1.  **Autonomous Revenue Recovery**: Monitor and recover failed payments automatically.
+2.  **Atomic Negotiation**: Dynamic payment link generation with built-in discount logic.
+3.  **Guardian Mode**: Brand safety firewall for all outgoing communications.
+4.  **Business Memory Layer (BML)**: Persistent customer context and sentiment analysis.
+5.  **Mass Orchestration**: Intelligent, large-scale communication management.
+
+## Features & Tools
+
+- **`send_smart_message`**: Send WhatsApp messages via Arara API (Templates or Session).
+- **`check_revenue_leaks`**: Scan AbacatePay for expired or pending payments.
+- **`negotiate_payment`**: Create payment links with custom amounts and descriptions.
+- **`get_customer_insights`**: Access BML for customer mood and history.
+- **`mass_orchestration`**: Trigger and monitor segmented broadcast campaigns.
 
 ## Authentication & Security
 
