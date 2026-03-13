@@ -47,7 +47,7 @@ If you are using a shared instance, configure the `Authorization` header:
     "ararahq": {
       "url": "https://mcp.ararahq.com/sse",
       "headers": {
-        "Authorization": "Bearer YOUR_ARARA_API_KEY"
+        "X-Arara-Key": "YOUR_ARARA_API_KEY"
       }
     }
   }
