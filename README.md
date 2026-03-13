@@ -28,7 +28,27 @@ Add this to your `claude_desktop_config.json`:
   "mcpServers": {
     "ararahq": {
       "command": "npx",
-      "args": ["-y", "ararahq-mcp"]
+      "args": ["-y", "ararahq-mcp"],
+      "env": {
+        "ARARA_API_KEY": "YOUR_KEY_HERE",
+        "ABACATE_API_KEY": "YOUR_KEY_HERE"
+      }
+    }
+  }
+}
+```
+
+#### Shared Hosting (mcp.ararahq.com)
+If you are using a shared instance, configure the `Authorization` header:
+
+```json
+{
+  "mcpServers": {
+    "ararahq": {
+      "url": "https://mcp.ararahq.com/sse",
+      "headers": {
+        "Authorization": "Bearer YOUR_ARARA_API_KEY"
+      }
     }
   }
 }

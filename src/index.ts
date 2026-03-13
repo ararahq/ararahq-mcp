@@ -9,6 +9,11 @@ import axios from "axios";
 import dotenv from "dotenv";
 import fs from "fs-extra";
 import path from "path";
+import { AsyncLocalStorage } from "async_hooks";
+
+// --- CONTEXT ---
+const sessionContext = new AsyncLocalStorage<{ sessionId: string }>();
+const sessionKeys = new Map<string, string>();
 // Smithery scans are often done in environments where import.meta might not be available
 // We remove the unused __filename/__dirname to prevent build errors.
 
@@ -24,7 +29,25 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
-// --- HELPER: Guardian Mode (Brand Safety Filter) ---
+// --- CONSTANTS & STATE ---
+const IS_SHARED_MODE = !(process.env.ARARA_API_KEY || process.env.ABACATE_API_KEY);
+
+// --- HELPERS ---
+const getSessionKey = (apiKey?: string): string | undefined => {
+  const context = sessionContext.getStore();
+  const sessionKey = context ? sessionKeys.get(context.sessionId) : undefined;
+  
+  // Priority: 1. Tool Param, 2. Session Header, 3. Env Var
+  return apiKey || sessionKey || process.env.ARARA_API_KEY;
+};
+
+const getAbacateSessionKey = (apiKey?: string): string | undefined => {
+  // Currently we use the same key for both or separate them if needed. 
+  // For now, priority is Param > Env.
+  return apiKey || process.env.ABACATE_API_KEY;
+};
+
+// --- GUARDIAN MODE ---
 const guardianFilter = (text: string): { safe: boolean; reason?: string } => {
   const sensitivePatterns = [
     /password/i, /senha/i, /credit card/i, /cartão de crédito/i,
@@ -51,10 +74,13 @@ server.tool(
     skipGuardian: z.boolean().optional().default(false).describe("Explicitly skip safety filter (not recommended)")
   },
   async ({ apiKey, to, text, skipGuardian }) => {
-    const activeKey = apiKey || process.env.ARARA_API_KEY;
+    const activeKey = getSessionKey(apiKey);
 
     if (!activeKey) {
-      return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+      return { 
+        content: [{ type: "text", text: "❌ Missing Arara API Key. Provide it via tools or Header (Authorization: Bearer <TOKEN>)." }], 
+        isError: true 
+      };
     }
 
     if (!skipGuardian) {
@@ -98,9 +124,13 @@ server.tool(
     reason: z.string().describe("Reason for this specific payment link")
   },
   async ({ abacateApiKey, amount, customerId, reason }) => {
-    const activeKey = abacateApiKey || process.env.ABACATE_API_KEY;
+    const activeKey = getAbacateSessionKey(abacateApiKey);
+
     if (!activeKey) {
-      return { content: [{ type: "text", text: "❌ Missing AbacatePay API Key." }], isError: true };
+      return { 
+        content: [{ type: "text", text: "❌ Missing AbacatePay API Key. Provide it via tools or environment." }], 
+        isError: true 
+      };
     }
     try {
       // Generic call to AbacatePay to create a checkout/payment link
@@ -130,9 +160,13 @@ server.tool(
     customerId: z.string().describe("Phone or Internal ID")
   },
   async ({ apiKey, customerId }) => {
-    const activeKey = apiKey || process.env.ARARA_API_KEY;
+    const activeKey = getSessionKey(apiKey);
+
     if (!activeKey) {
-      return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+      return { 
+        content: [{ type: "text", text: "❌ Missing Arara API Key. Provide it via tools or Header." }], 
+        isError: true 
+      };
     }
     // This tool simulates fetching vectorized 'mood' and context history.
     // In a real implementation, this would query a Vector DB via Arara's backend.
@@ -152,9 +186,13 @@ server.tool(
     apiKey: z.string().optional().describe("Arara API Key (optional if ARARA_API_KEY env is set)")
   },
   async ({ apiKey }) => {
-    const activeKey = apiKey || process.env.ARARA_API_KEY;
+    const activeKey = getSessionKey(apiKey);
+
     if (!activeKey) {
-      return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+      return { 
+        content: [{ type: "text", text: "❌ Missing Arara API Key." }], 
+        isError: true 
+      };
     }
     try {
       const response = await axios.get(
@@ -192,9 +230,13 @@ server.tool(
     variables: z.array(z.string()).optional().describe("Variables for the template")
   },
   async ({ apiKey, to, templateName, variables }) => {
-    const activeKey = apiKey || process.env.ARARA_API_KEY;
+    const activeKey = getSessionKey(apiKey);
+
     if (!activeKey) {
-      return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+      return { 
+        content: [{ type: "text", text: "❌ Missing Arara API Key. Provide it via tools or Header." }], 
+        isError: true 
+      };
     }
     try {
       const response = await axios.post(
@@ -231,9 +273,13 @@ server.tool(
     csvUrl: z.string().optional().describe("URL of the CSV with recipients and variables")
   },
   async ({ apiKey, name, templateName, idempotencyKey, csvUrl }) => {
-    const activeKey = apiKey || process.env.ARARA_API_KEY;
+    const activeKey = getSessionKey(apiKey);
+
     if (!activeKey) {
-      return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+      return { 
+        content: [{ type: "text", text: "❌ Missing Arara API Key. Provide it via tools or Header." }], 
+        isError: true 
+      };
     }
     try {
       const response = await axios.post(
@@ -268,9 +314,13 @@ server.tool(
     thresholdDays: z.number().optional().default(1).describe("Days since payment expiration")
   },
   async ({ abacateApiKey, thresholdDays }) => {
-    const activeKey = abacateApiKey || process.env.ABACATE_API_KEY;
+    const activeKey = getAbacateSessionKey(abacateApiKey);
+
     if (!activeKey) {
-      return { content: [{ type: "text", text: "❌ Missing AbacatePay API Key." }], isError: true };
+      return { 
+        content: [{ type: "text", text: "❌ Missing AbacatePay API Key. Provide it via tools or environment." }], 
+        isError: true 
+      };
     }
     // This is a specialized tool for the 'Autonomous Revenue Recovery' vision.
     // It would normally query AbacatePay's billing history to find failed/expired payments.
@@ -291,6 +341,13 @@ server.tool(
     abacateApiKey: z.string().optional().describe("AbacatePay API Key")
   },
   async ({ araraApiKey, abacateApiKey }) => {
+    if (IS_SHARED_MODE) {
+      return {
+        content: [{ type: "text", text: "🚨 SECURITY: 'configure_credentials' is disabled in Shared Mode. Please use Environment Variables or Header Parameters." }],
+        isError: true
+      };
+    }
+
     try {
       const envPath = path.join(process.cwd(), ".env");
       let envContent = "";
@@ -345,24 +402,46 @@ async function run() {
     const app = express();
     app.use(cors());
 
-    let transport: SSEServerTransport | null = null;
+    const transports = new Map<string, SSEServerTransport>();
 
     app.get("/sse", async (req, res) => {
-      transport = new SSEServerTransport("/messages", res);
+      const authHeader = req.headers.authorization;
+      const transport = new SSEServerTransport("/messages", res);
+      
+      const sessionId = (transport as any).sessionId || Math.random().toString(36).substring(7);
+      transports.set(sessionId, transport);
+
+      if (authHeader?.startsWith("Bearer ")) {
+        const token = authHeader.split(" ")[1];
+        sessionKeys.set(sessionId, token);
+        console.error(`[Session ${sessionId}] Authenticated with Header Token`);
+      }
+
       await server.connect(transport);
+      
+      res.on("close", () => {
+        transports.delete(sessionId);
+        sessionKeys.delete(sessionId);
+      });
     });
 
     app.post("/messages", async (req, res) => {
+      const sessionId = req.query.sessionId as string;
+      const transport = transports.get(sessionId);
+
       if (transport) {
-        await transport.handlePostMessage(req, res);
+        // Wrap the message handling in the session context so tool handlers can access it
+        await sessionContext.run({ sessionId }, async () => {
+          await transport.handlePostMessage(req, res);
+        });
       } else {
-        res.status(400).send("No active SSE session");
+        res.status(400).send("No active SSE session for this ID");
       }
     });
 
     const port = process.env.PORT || 3333;
     app.listen(port, () => {
-      const mode = (process.env.ARARA_API_KEY || process.env.ABACATE_API_KEY) ? "DEDICATED" : "SHARED/MULTI-TENANT";
+      const mode = !IS_SHARED_MODE ? "DEDICATED" : "SHARED/MULTI-TENANT";
       console.error(`Arara Revenue OS MCP Server running on SSE at http://localhost:${port} [Mode: ${mode}]`);
     });
   } else {
