@@ -416,16 +416,20 @@ async function run() {
 
     app.get("/sse", async (req, res) => {
       console.error(`[SSE GET] New connection from ${req.ip}`);
-      // Priority: Custom Headers > Authorization Header > Query Param
+      // Priority: X-Arara-Key Header > Authorization Header > Query Param
       const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
       const abacateToken = (req.headers['x-abacate-key'] as string);
       
-      // We point messages back to the same /sse path but via POST
       const transport = new SSEServerTransport("/sse", res);
       
-      const sessionId = (transport as any).sessionId || Math.random().toString(36).substring(7);
+      // The SDK generates a sessionId in the constructor. We must use it.
+      const sessionId = transport.sessionId; 
+      if (!sessionId) {
+        console.error("[SSE ERROR] SDK failed to generate a sessionId!");
+      }
+      
       transports.set(sessionId, transport);
-      console.error(`[SSE GET] Session created: ${sessionId}`);
+      console.error(`[SSE GET] Session tracked: ${sessionId}`);
 
       if (araraToken) {
         const token = araraToken.startsWith("Bearer ") ? araraToken.split(" ")[1] : araraToken;
@@ -436,9 +440,8 @@ async function run() {
         sessionKeysAbacate.set(sessionId, token);
       }
 
-      console.error(`[Session ${sessionId}] Authenticated [Arara: ${!!araraToken}, Abacate: ${!!abacateToken}]`);
-      
       await server.connect(transport);
+      console.error(`[Session ${sessionId}] Connected to McpServer`);
       
       res.on("close", () => {
         console.error(`[SSE CLOSE] Session ended: ${sessionId}`);
@@ -449,7 +452,14 @@ async function run() {
     });
 
     app.post("/sse", async (req, res) => {
-      const sessionId = req.query.sessionId as string;
+      // Look for sessionId in query params (standard), then body, then headers
+      const sessionId = (req.query.sessionId as string) || (req.body.sessionId as string) || (req.headers['x-session-id'] as string);
+      
+      if (!sessionId) {
+        console.error(`[SSE POST ERROR] Request missing sessionId. Query: ${JSON.stringify(req.query)}, Headers: ${JSON.stringify(req.headers)}`);
+        return res.status(400).send("Missing sessionId parameter");
+      }
+
       console.error(`[SSE POST] Message for session: ${sessionId}. Active sessions: ${Array.from(transports.keys()).join(", ")}`);
       const transport = transports.get(sessionId);
 
@@ -458,7 +468,7 @@ async function run() {
           await transport.handlePostMessage(req, res);
         });
       } else {
-        console.error(`[SSE POST ERROR] Session ${sessionId} not found.`);
+        console.error(`[SSE POST ERROR] Session ${sessionId} not found in active transports.`);
         res.status(400).send("No active SSE session for this ID");
       }
     });
