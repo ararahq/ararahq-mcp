@@ -405,16 +405,18 @@ async function run() {
     const transports = new Map<string, SSEServerTransport>();
 
     app.get("/sse", async (req, res) => {
-      const authHeader = req.headers.authorization;
+      // Priority: Header > Query Param
+      const authHeader = req.headers.authorization || (req.query.Authorization as string);
       const transport = new SSEServerTransport("/messages", res);
       
       const sessionId = (transport as any).sessionId || Math.random().toString(36).substring(7);
       transports.set(sessionId, transport);
 
-      if (authHeader?.startsWith("Bearer ")) {
-        const token = authHeader.split(" ")[1];
+      if (authHeader) {
+        // Handle both "Bearer <token>" and raw token from query
+        const token = authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : authHeader;
         sessionKeys.set(sessionId, token);
-        console.error(`[Session ${sessionId}] Authenticated with Header Token`);
+        console.error(`[Session ${sessionId}] Authenticated with ${req.headers.authorization ? 'Header' : 'Query'} Token`);
       }
 
       await server.connect(transport);
