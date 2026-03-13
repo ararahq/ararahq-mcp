@@ -416,20 +416,29 @@ async function run() {
     });
 
     app.get("/sse", async (req, res) => {
-      console.error(`[SSE GET] ${req.method} ${req.originalUrl} from ${req.ip}`);
+      console.error(`[SSE GET] Incoming: ${req.method} ${req.url}`);
+      
+      // Critical headers for SSE through Nginx/Cloudflare
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no'); 
+      res.flushHeaders();
+
       // Priority: Custom Headers > Authorization Header > Query Param
       const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
       const abacateToken = (req.headers['x-abacate-key'] as string);
       
       const transport = new SSEServerTransport("/sse", res);
+      const sessionId = transport.sessionId;
       
-      const sessionId = transport.sessionId; 
       if (!sessionId) {
-        console.error("[SSE ERROR] SDK failed to generate a sessionId!");
+        console.error("[SSE ERROR] Could not get sessionId from transport");
+        return res.end();
       }
-      
+
       transports.set(sessionId, transport);
-      console.error(`[SSE GET] Session tracked: ${sessionId}`);
+      console.error(`[SSE GET] Session Established: ${sessionId}. Total active: ${transports.size}`);
 
       if (araraToken) {
         const token = araraToken.startsWith("Bearer ") ? araraToken.split(" ")[1] : araraToken;
@@ -441,7 +450,7 @@ async function run() {
       }
 
       await server.connect(transport);
-      console.error(`[Session ${sessionId}] Connected to McpServer`);
+      console.error(`[Session ${sessionId}] Connected to McpServer engine`);
       
       res.on("close", () => {
         console.error(`[SSE CLOSE] Session ended: ${sessionId}`);
@@ -452,28 +461,26 @@ async function run() {
     });
 
     app.post("/sse", async (req, res) => {
-      console.error(`[SSE POST] ${req.method} ${req.url} (Original: ${req.originalUrl}). Body: ${JSON.stringify(req.body)}`);
+      console.error(`[SSE POST] ${req.method} ${req.originalUrl}. BodyKeys: ${Object.keys(req.body).join(", ")}`);
       
-      const parsedUrl = url.parse(req.url, true);
-      // Smithery or other clients might pass sessionId in Body if it's not in URL
-      const sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || (req.body.sessionId as string) || (req.headers['x-session-id'] as string);
+      const parsedUrl = url.parse(req.originalUrl, true);
+      const sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || (req.body.sessionId as string);
       
       if (!sessionId) {
-        console.error(`[SSE POST ERROR] Request missing sessionId at ${req.url}. Query: ${JSON.stringify(req.query)}. ParsedQuery: ${JSON.stringify(parsedUrl.query)}. Active: ${Array.from(transports.keys()).join(", ")}`);
-        return res.status(400).send("Missing sessionId parameter");
+        console.error(`[SSE POST ERROR] Missing sessionId at ${req.originalUrl}. Query: ${JSON.stringify(req.query)}`);
+        return res.status(400).send("Endpoint requires ?sessionId=");
       }
 
       const transport = transports.get(sessionId);
 
       if (transport) {
         await sessionContext.run({ sessionId }, async () => {
-          // IMPORTANT: If using express.json(), we MUST pass req.body here
-          // because the middleware already consumed the request stream.
+          // Pass req.body because express.json() consumed the original stream
           await transport.handlePostMessage(req, res, req.body);
         });
       } else {
-        console.error(`[SSE POST ERROR] Session ${sessionId} not found in active transports.`);
-        res.status(400).send("No active SSE session for this ID");
+        console.error(`[SSE POST ERROR] No active session for ${sessionId}. Active sessions: [${Array.from(transports.keys()).join(", ")}]`);
+        res.status(400).send(`No active session found for ID ${sessionId}`);
       }
     });
 
