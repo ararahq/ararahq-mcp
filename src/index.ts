@@ -415,7 +415,7 @@ async function run() {
     };
 
     app.get("/", (req, res) => {
-      res.json({ status: "alive", mode: "SHARED", version: "1.0.8", active: transports.size });
+      res.json({ status: "alive", mode: "SHARED", version: "1.0.9", active: transports.size });
     });
 
     app.get("/.well-known/mcp/server-card.json", (req, res) => {
@@ -423,7 +423,7 @@ async function run() {
         mcpServers: {
           ararahq: {
             name: "Arara Revenue OS",
-            version: "1.0.8",
+            version: "1.0.9",
             url: "https://mcp.ararahq.com/sse",
             transport: "sse"
           }
@@ -432,7 +432,7 @@ async function run() {
     });
 
     app.get("/sse", async (req, res) => {
-      console.error(`[SSE GET] Handshake Attempt: ${req.url} (IP: ${req.ip})`);
+      console.error(`[SSE GET] Handshake: ${req.url}`);
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
@@ -441,29 +441,34 @@ async function run() {
       res.setHeader('X-Accel-Buffering', 'no');
       res.setHeader('X-Content-Type-Options', 'nosniff');
       
-      // Standard SSE Ping to open the pipe immediately
-      res.write(':\n\n'); 
+      // Buffer Breaking: 2KB padding to force Cloudflare/Nginx flush
+      res.write(":" + " ".repeat(2048) + "\n\n");
+      res.write("event: ping\ndata: {}\n\n");
 
       const transport = new SSEServerTransport("/sse", res);
       const sessionId = getDeterministicSessionId(req) || transport.sessionId;
       
+      // CRITICAL: Force the transport to use our deterministic sessionId
+      // so the 'endpoint' message sent to the client is correct.
+      (transport as any).sessionId = sessionId;
+
       if (!sessionId) {
         console.error("[SSE ERROR] No token for session");
         return res.status(401).send("Authentication required");
       }
 
       transports.set(sessionId, transport);
-      console.error(`[SSE Session] Established: ${sessionId}`);
+      console.error(`[SSE Session] Established & Synced: ${sessionId}`);
 
       const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
       const abacateToken = (req.headers['x-abacate-key'] as string);
       
       if (araraToken) {
-        const token = araraToken.replace(/^Bearer\s+/i, '').trim();
+        const token = araraToken.toString().replace(/^Bearer\s+/i, '').trim();
         sessionKeysArara.set(sessionId, token);
       }
       if (abacateToken) {
-        const token = abacateToken.replace(/^Bearer\s+/i, '').trim();
+        const token = abacateToken.toString().replace(/^Bearer\s+/i, '').trim();
         sessionKeysAbacate.set(sessionId, token);
       }
 
