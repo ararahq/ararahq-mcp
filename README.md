@@ -40,19 +40,19 @@ Go to **Settings > Models > MCP Servers** and add a new `command` server:
 
 ## 🐳 Docker & Hosting (SSE Mode)
 
-O repositório está pronto para rodar como um servidor na nuvem (ex: `mcp.ararahq.com`).
+The repository is ready to run as a cloud server (e.g., `mcp.ararahq.com`).
 
 ```bash
-# 1. Build da imagem
+# 1. Build the image
 docker build -t ararahq-mcp .
 
-# 2. Rodar como Servidor (SSE)
-# O container detecta a variável PORT automaticamente
+# 2. Run as Server (SSE)
+# The container automatically detects the PORT variable
 docker run -p 3000:3000 -e PORT=3000 ararahq-mcp
 ```
 
-### Rodar Localmente (Desenvolvimento)
-Se você está desenvolvendo ou quer testar o modo servidor sem Docker:
+### Local Development
+If you are developing or want to test the server mode without Docker:
 ```bash
 npm run build
 node build/index.js --transport sse
@@ -62,9 +62,9 @@ node build/index.js --transport sse
 
 ## Usage Examples
 
-- *"IA, verifique quem não pagou o Pix ontem na AbacatePay e mande um lembrete via Arara."*
-- *"Gere um link de pagamento de R$ 50 para o cliente X com 10% de desconto."*
-- *"Qual o histórico de humor do cliente Y antes de eu responder?"*
+- *"AI, check who didn't pay their Pix yesterday on AbacatePay and send a reminder via Arara."*
+- *"Generate a payment link for R$ 50 for customer X with a 10% discount."*
+- *"What is the mood history of customer Y before I respond?"*
 
 ---
 *Built with ❤️ by Arara Architecture Team.*
