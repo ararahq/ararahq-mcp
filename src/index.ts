@@ -115,8 +115,41 @@ async function run() {
       return "v-" + crypto.createHash('md5').update(token).digest('hex').substring(0, 12);
     };
 
+    const getLandingPage = (sessions: number) => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arara Revenue OS | MCP</title>
+    <style>
+        :root { --primary: #FF6B00; --bg: #050505; --text: #FFFFFF; }
+        body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
+        .container { text-align: center; position: relative; z-index: 10; padding: 2rem; border-radius: 24px; background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); max-width: 400px; width: 90%; }
+        .logo { font-size: 2.5rem; font-weight: 800; letter-spacing: -1px; margin-bottom: 0.5rem; background: linear-gradient(135deg, #fff 0%, var(--primary) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .status { display: inline-flex; align-items: center; gap: 8px; background: rgba(0, 255, 128, 0.1); color: #00FF80; padding: 8px 16px; border-radius: 99px; font-size: 0.85rem; font-weight: 600; margin-bottom: 1.5rem; }
+        .dot { width: 8px; height: 8px; background: #00FF80; border-radius: 50%; box-shadow: 0 0 10px #00FF80; animation: pulse 2s infinite; }
+        p { opacity: 0.6; line-height: 1.6; font-size: 0.95rem; }
+        .glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; height: 300px; background: var(--primary); filter: blur(120px); opacity: 0.15; z-index: 1; pointer-events: none; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="glow"></div>
+    <div class="container">
+        <div class="logo">Arara OS</div>
+        <div class="status"><span class="dot"></span> Active Transport (SSE)</div>
+        <p>The Universal MCP Bridge is active and ready.<br><b>${sessions}</b> concurrent sessions established.</p>
+        <p style="font-size: 0.75rem; margin-top: 2rem;">© 2026 Arara HQ / AbacatePay</p>
+    </div>
+</body>
+</html>`;
+
     app.get("/", (req, res) => {
-      res.json({ status: "alive", version: "1.1.1", active: transports.size });
+      if (req.headers.accept?.includes("text/html")) {
+        return res.send(getLandingPage(transports.size));
+      }
+      res.json({ status: "active", version: "1.1.1", sessions: transports.size });
     });
 
     app.get("/debug", (req, res) => {
@@ -153,7 +186,7 @@ async function run() {
         res.setHeader('X-Accel-Buffering', 'no');
         res.setHeader('Cache-Control', 'no-cache, no-transform');
 
-        const transport = new SSEServerTransport("/messages", res);
+        const transport = new SSEServerTransport("/sse", res);
         const sessionId = transport.sessionId;
 
         transports.set(sessionId, transport);
