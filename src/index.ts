@@ -27,7 +27,7 @@ dotenv.config();
 
 const server = new McpServer({
   name: "arara-revenue-os",
-  version: "1.0.7",
+  version: "1.0.0",
 });
 
 // --- CONSTANTS & STATE ---
@@ -407,14 +407,15 @@ async function run() {
     const getDeterministicSessionId = (req: express.Request): string | null => {
       const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
       const abacateToken = (req.headers['x-abacate-key'] as string);
-      const token = araraToken || abacateToken;
+      let token = araraToken || abacateToken;
       if (!token) return null;
-      const seed = token.startsWith("Bearer ") ? token.split(" ")[1] : token;
-      return "v-" + crypto.createHash('md5').update(seed).digest('hex').substring(0, 12);
+      // Ultra-robust normalization
+      token = token.toString().replace(/^Bearer\s+/i, '').trim();
+      return "v-" + crypto.createHash('md5').update(token).digest('hex').substring(0, 12);
     };
 
     app.get("/", (req, res) => {
-      res.json({ status: "alive", mode: "SHARED", version: "1.0.7", active: transports.size });
+      res.json({ status: "alive", mode: "SHARED", version: "1.0.8", active: transports.size });
     });
 
     app.get("/.well-known/mcp/server-card.json", (req, res) => {
@@ -422,7 +423,7 @@ async function run() {
         mcpServers: {
           ararahq: {
             name: "Arara Revenue OS",
-            version: "1.0.7",
+            version: "1.0.8",
             url: "https://mcp.ararahq.com/sse",
             transport: "sse"
           }
@@ -431,7 +432,7 @@ async function run() {
     });
 
     app.get("/sse", async (req, res) => {
-      console.error(`[SSE GET] Handshake: ${req.url}`);
+      console.error(`[SSE GET] Handshake Attempt: ${req.url} (IP: ${req.ip})`);
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
@@ -440,6 +441,9 @@ async function run() {
       res.setHeader('X-Accel-Buffering', 'no');
       res.setHeader('X-Content-Type-Options', 'nosniff');
       
+      // Standard SSE Ping to open the pipe immediately
+      res.write(':\n\n'); 
+
       const transport = new SSEServerTransport("/sse", res);
       const sessionId = getDeterministicSessionId(req) || transport.sessionId;
       
@@ -455,11 +459,11 @@ async function run() {
       const abacateToken = (req.headers['x-abacate-key'] as string);
       
       if (araraToken) {
-        const token = araraToken.startsWith("Bearer ") ? araraToken.split(" ")[1] : araraToken;
+        const token = araraToken.replace(/^Bearer\s+/i, '').trim();
         sessionKeysArara.set(sessionId, token);
       }
       if (abacateToken) {
-        const token = abacateToken.startsWith("Bearer ") ? abacateToken.split(" ")[1] : abacateToken;
+        const token = abacateToken.replace(/^Bearer\s+/i, '').trim();
         sessionKeysAbacate.set(sessionId, token);
       }
 
@@ -474,9 +478,9 @@ async function run() {
     });
 
     app.post("/sse", async (req, res) => {
-      const parsedUrl = url.parse(req.url, true);
-      const sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || getDeterministicSessionId(req);
-      
+      const sessionId = (req.query.sessionId as string) || getDeterministicSessionId(req);
+      console.error(`[SSE POST] Message for ${sessionId}. Headers: ${JSON.stringify(req.headers)}`);
+
       if (!sessionId) {
         console.error(`[SSE POST ERROR] No sessionId found.`);
         return res.status(400).send("Session ID required");

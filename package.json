@@ -1,6 +1,6 @@
 {
   "name": "ararahq-mcp",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Universal Arara Revenue Operating System MCP",
   "main": "build/index.js",
   "bin": {
