@@ -151,10 +151,8 @@ async function run() {
 </html>`;
 
     app.get("/", (req, res) => {
-      if (req.headers.accept?.includes("text/html")) {
-        return res.send(getLandingPage(transports.size));
-      }
-      res.json({ status: "active", version: "1.1.1", sessions: transports.size });
+      console.error(`[UI] Serving landing page to ${req.ip}`);
+      res.send(getLandingPage(transports.size));
     });
 
     app.get("/debug", (req, res) => {
@@ -185,7 +183,8 @@ async function run() {
 
     const handleConnect = async (req: express.Request, res: express.Response) => {
       try {
-        if (req.headers.accept?.includes("text/html")) {
+        if (req.method === "GET" && !req.headers.accept?.includes("text/event-stream")) {
+          console.error(`[UI] Serving landing page via /sse to ${req.ip}`);
           return res.send(getLandingPage(transports.size));
         }
         console.error(`[SSE DEBUG] Initializing session via ${req.method} from ${req.ip}`);
