@@ -417,10 +417,25 @@ async function run() {
     const transports = new Map<string, SSEServerTransport>();
 
     app.get("/", (req, res) => {
-      res.json({ status: "alive", mode: "SHARED" });
+      res.json({ status: "alive", mode: "SHARED", version: "1.0.4" });
+    });
+
+    // Smithery skip-scan configuration
+    app.get("/.well-known/mcp/server-card.json", (req, res) => {
+      res.json({
+        mcpServers: {
+          ararahq: {
+            name: "Arara Revenue OS",
+            version: "1.0.4",
+            url: "https://mcp.ararahq.com/sse",
+            transport: "sse"
+          }
+        }
+      });
     });
 
     app.get("/sse", async (req, res) => {
+      console.error(`[SSE Connection] GET ${req.originalUrl}`);
       // Aggressive headers to bypass ALL proxies
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
