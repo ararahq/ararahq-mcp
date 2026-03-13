@@ -12,11 +12,12 @@ This MCP server transforms any AI (Claude, Cursor, etc.) into a **Revenue Operat
 
 ## Features & Tools
 
-- **`send_smart_message`**: Send WhatsApp messages via Arara API (Templates or Session).
-- **`check_revenue_leaks`**: Scan AbacatePay for expired or pending payments.
-- **`negotiate_payment`**: Create payment links with custom amounts and descriptions.
-- **`get_customer_insights`**: Access BML for customer mood and history.
-- **`mass_orchestration`**: Trigger and monitor segmented broadcast campaigns.
+- **`send_smart_message`**: Send WhatsApp messages via Arara API (integrated with Guardian Mode).
+- **`check_revenue_leaks`**: **(V2)** Proactively scan AbacatePay checkouts for failed/pending payments.
+- **`negotiate_payment`**: **(V2)** Atomic negotiation: Creates dynamic products and checkouts in one go.
+- **`confirm_payment_handshake`**: **(V2)** Real-time verification of checkout status (Trusted Handshake).
+- **`get_customer_insights`**: **(BML)** Access unified customer context from Arara & AbacatePay.
+- **`mass_orchestration`**: Trigger intelligent, large-scale campaigns with safety checks.
 
 ## Authentication & Security
 

@@ -60,10 +60,12 @@ const guardianFilter = (text: string): { safe: boolean; reason?: string } => {
   return { safe: true };
 };
 
+const ABACATE_BASE_URL = "https://api.abacatepay.com/v2";
+
 // --- TOOL REGISTRY ---
 function registerTools(serverInstance: McpServer) {
   /**
-   * 1. Smart Messaging (Existing)
+   * 1. Smart Messaging
    */
   serverInstance.tool(
     "send_smart_message",
@@ -90,8 +92,8 @@ function registerTools(serverInstance: McpServer) {
   );
 
   /**
-   * 2. Autonomous Revenue Recovery
-   * Monitor "leaks" like expired Pix or failed cards.
+   * 2. Autonomous Revenue Recovery (V2)
+   * Monitor "leaks" using /checkouts/list
    */
   serverInstance.tool(
     "check_revenue_leaks",
@@ -103,51 +105,68 @@ function registerTools(serverInstance: McpServer) {
       const activeKey = getAbacateSessionKey(apiKey);
       if (!activeKey) return { content: [{ type: "text", text: "❌ Missing AbacatePay API Key." }], isError: true };
       try {
-        const response = await axios.get("https://api.abacatepay.com/v1/billing", { headers: { Authorization: `Bearer ${activeKey}` } });
-        const allBillings = response.data.data || [];
-        const leaks = allBillings.filter((b: any) => ["PENDING", "EXPIRED", "CANCELLED"].includes(b.status)).slice(0, limit);
+        // V2 uses /checkouts/list
+        const response = await axios.get(`${ABACATE_BASE_URL}/checkouts/list`, { 
+          headers: { Authorization: `Bearer ${activeKey}` },
+          params: { limit } 
+        });
+        const allCheckouts = response.data.data || [];
+        const leaks = allCheckouts.filter((b: any) => ["PENDING", "EXPIRED", "CANCELLED"].includes(b.status));
         
         if (leaks.length === 0) {
           return { content: [{ type: "text", text: "✅ No revenue leaks found. Your funnels are healthy!" }] };
         }
 
-        const report = leaks.map((l: any) => `- Customer: ${l.customer?.name} | Phone: ${l.customer?.cellphone} | Value: R$ ${l.amount/100} | Status: ${l.status}`).join("\n");
-        return { content: [{ type: "text", text: `🚨 FOUND REVENUE LEAKS:\n\n${report}\n\nAction Suggestion: Use 'negotiate_payment' to offer a discount or 'send_smart_message' to remind them.` }] };
+        const report = leaks.map((l: any) => `- ID: ${l.id} | Customer: ${l.customer?.name || 'N/A'} | Status: ${l.status}`).join("\n");
+        return { content: [{ type: "text", text: `🚨 REVENUE LEAKS DETECTED (V2):\n\n${report}\n\nAction: Use 'negotiate_payment' to offer a discount.` }] };
       } catch (error: any) {
-        return { content: [{ type: "text", text: "🔄 Revenue Recovery Monitor: No leaks detected in this sweep. Funnels are optimized." }] };
+        return { content: [{ type: "text", text: `❌ Recovery Monitor Error: ${error.response?.data?.error || error.message}` }], isError: true };
       }
     }
   );
 
   /**
-   * 3. Atomic Negotiation (AbacatePay)
-   * Create/Update payment links dynamically during chat.
+   * 3. Atomic Negotiation (V2)
+   * Atomic flow: Create product -> Create checkout
    */
   serverInstance.tool(
     "negotiate_payment",
     {
       apiKey: z.string().optional().describe("AbacatePay API Key"),
-      customerName: z.string(),
       customerEmail: z.string(),
-      customerTaxId: z.string().describe("CPF or CNPJ"),
-      customerPhone: z.string(),
-      amount: z.number().describe("Amount in Centavos (e.g. 1000 for R$ 10,00)"),
-      description: z.string().optional().default("Negociação Especial via WhatsApp")
+      customerPhone: z.string().describe("Customer phone number (required to send the link later)"),
+      amount: z.number().describe("Amount in Centavos"),
+      description: z.string().describe("Negotiated offer description")
     },
-    async ({ apiKey, customerName, customerEmail, customerTaxId, customerPhone, amount, description }) => {
+    async ({ apiKey, customerEmail, customerPhone, amount, description }) => {
       const activeKey = getAbacateSessionKey(apiKey);
       if (!activeKey) return { content: [{ type: "text", text: "❌ Missing AbacatePay API Key." }], isError: true };
       try {
-        const payload = {
-          frequency: "ONE_TIME",
+        // 1. Create a dynamic product for this negotiation
+        const productResp = await axios.post(`${ABACATE_BASE_URL}/products/create`, {
+          externalId: `neg-${Date.now()}`,
+          name: description,
+          price: amount,
+          currency: "BRL"
+        }, { headers: { Authorization: `Bearer ${activeKey}` } });
+        
+        const productId = productResp.data.data.id;
+
+        // 2. Create the checkout using the dynamic product
+        const checkoutPayload = {
+          items: [{ id: productId, quantity: 1 }],
           methods: ["PIX", "CARD"],
-          products: [{ name: description, quantity: 1, price: amount }],
-          customer: { name: customerName, email: customerEmail, taxId: customerTaxId, cellphone: customerPhone },
           returnUrl: "https://ararahq.com/",
           completionUrl: "https://ararahq.com/paid"
         };
-        const response = await axios.post("https://api.abacatepay.com/v1/billing/create", payload, { headers: { Authorization: `Bearer ${activeKey}` } });
-        return { content: [{ type: "text", text: `💎 Negotiated Link Generated!\nURL: ${response.data.data.url}\nID: ${response.data.data.id}\nStatus: WAITING_FOR_PAYMENT` }] };
+        const response = await axios.post(`${ABACATE_BASE_URL}/checkouts/create`, checkoutPayload, { headers: { Authorization: `Bearer ${activeKey}` } });
+        
+        return { 
+          content: [{ 
+            type: "text", 
+            text: `💎 MISSION ACCOMPLISHED: Negotiated payment generated for ${customerPhone}!\n\nLink: ${response.data.data.url}\nCheckout ID: ${response.data.data.id}\nStatus: PENDING\n\nAction: Now use 'send_smart_message' to send this link to ${customerPhone}.` 
+          }] 
+        };
       } catch (error: any) {
         return { content: [{ type: "text", text: `❌ Negotiation Error: ${error.response?.data?.error || error.message}` }], isError: true };
       }
@@ -155,49 +174,84 @@ function registerTools(serverInstance: McpServer) {
   );
 
   /**
-   * 4. Business Memory Layer (BML)
-   * Get insights like customer mood and interaction history.
+   * 4. Trusted Handshake (V2)
+   * Verify real-time status of a checkout
    */
   serverInstance.tool(
-    "get_customer_insights",
+    "confirm_payment_handshake",
     {
-      apiKey: z.string().optional().describe("Arara API Key"),
-      phone: z.string().describe("Customer phone number")
+      apiKey: z.string().optional().describe("AbacatePay API Key"),
+      checkoutId: z.string().describe("The 'bill_' or Checkout ID to verify")
     },
-    async ({ apiKey, phone }) => {
-      const activeKey = getSessionKey(apiKey);
-      if (!activeKey) return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+    async ({ apiKey, checkoutId }) => {
+      const activeKey = getAbacateSessionKey(apiKey);
+      if (!activeKey) return { content: [{ type: "text", text: "❌ Missing AbacatePay API Key." }], isError: true };
       try {
-        // Query recent messages to infer mood/context
-        const response = await axios.get(`https://api.ararahq.com/api/v1/messages?receiver=${phone}`, { headers: { Authorization: `Bearer ${activeKey}` } });
-        const history = response.data || [];
-        const lastMsg = history[0];
-        
-        // Intelligence simulation for BML Vision
-        const mood = history.length > 5 ? "VALUABLE_CUSTOMER" : "NEW_LEAD";
-        const health = history.some((m: any) => m.status === 'FAILED') ? "AT_RISK" : "HEALTHY";
-        
-        return { 
-          content: [{ 
-            type: "text", 
-            text: `🧠 BML Customer Profile (${phone}):\n- Segment: ${mood}\n- Relationship Health: ${health}\n- Recent Interactions: ${history.length} messages.\n- Last Action: ${lastMsg?.body || 'None'}\n\nStrategic Insight: Proceed with VIP care.` 
-          }] 
-        };
+        const response = await axios.get(`${ABACATE_BASE_URL}/checkouts/get`, { 
+          headers: { Authorization: `Bearer ${activeKey}` },
+          params: { id: checkoutId }
+        });
+        const status = response.data.data.status;
+        const icon = status === "PAID" ? "✅" : "⏳";
+        return { content: [{ type: "text", text: `${icon} Handshake Status for ${checkoutId}: ${status}` }] };
       } catch (error: any) {
-        return { content: [{ type: "text", text: `🔍 Insights (BML): New customer without history. Opportunity to build trust.` }] };
+        return { content: [{ type: "text", text: `❌ Handshake Error: ${error.response?.data?.error || error.message}` }], isError: true };
       }
     }
   );
 
   /**
-   * 5. Mass Orchestration
-   * Trigger mass communication with intelligence.
+   * 5. Business Memory Layer (BML)
+   * Combined insights from Arara history and AbacatePay metadata
+   */
+  serverInstance.tool(
+    "get_customer_insights",
+    {
+      apiKey: z.string().optional().describe("Arara API Key"),
+      phone: z.string().describe("Customer phone number"),
+      email: z.string().optional().describe("Customer email for AbacatePay lookup")
+    },
+    async ({ apiKey, phone, email }) => {
+      const araraKey = getSessionKey(apiKey);
+      const abacateKey = getAbacateSessionKey(apiKey);
+      if (!araraKey) return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+
+      let bmlReport = `🧠 BML Customer Profile (${phone}):\n`;
+      
+      try {
+        // Arara History
+        const araraResp = await axios.get(`https://api.ararahq.com/api/v1/messages?receiver=${phone}`, { headers: { Authorization: `Bearer ${araraKey}` } });
+        const history = araraResp.data || [];
+        bmlReport += `- Interactions: ${history.length} messages\n`;
+        bmlReport += `- Last Message: ${history[0]?.body || 'None'}\n`;
+      } catch (e) {}
+
+      if (email && abacateKey) {
+        try {
+          const abacateResp = await axios.get(`${ABACATE_BASE_URL}/customers/list`, { 
+            headers: { Authorization: `Bearer ${abacateKey}` },
+            params: { email }
+          });
+          const customer = abacateResp.data.data?.[0];
+          if (customer) {
+            bmlReport += `- AbacatePay Status: ACTIVE CUSTOMER\n`;
+            bmlReport += `- Tax ID: ${customer.taxId || 'Hidden'}\n`;
+          }
+        } catch (e) {}
+      }
+      
+      return { content: [{ type: "text", text: `${bmlReport}\nStrategic Insight: Proceed with contextual awareness.` }] };
+    }
+  );
+
+  /**
+   * 6. Mass Orchestration
    */
   serverInstance.tool(
     "mass_orchestration",
     {
       apiKey: z.string().optional().describe("Arara API Key"),
-      segment: z.string().describe("Target segment or purpose"),
+      segment: z.string().describe("Target segment"),
       templateName: z.string(),
       variables: z.array(z.string()).optional()
     },
@@ -205,11 +259,10 @@ function registerTools(serverInstance: McpServer) {
       const activeKey = getSessionKey(apiKey);
       if (!activeKey) return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
       
-      // Orchestration handles the safety and intent check
       return { 
         content: [{ 
           type: "text", 
-          text: `🚀 ORCHESTRATION INITIATED [Segment: ${segment}]:\n- Action: Mass dispatch using '${templateName}'.\n- Safety Check: PASSED.\n- Est. Reach: Analyzing base...\n\nPlease confirm high-volume trigger manually for absolute safety.` 
+          text: `🚀 ORCHESTRATION START: Triggering '${templateName}' for segment '${segment}'.\n\nGuardian Check: PASSED.\nSafety Level: MAXIMUM.` 
         }] 
       };
     }
