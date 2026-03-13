@@ -11,9 +11,12 @@ This MCP server transforms any AI (Claude, Cursor, etc.) into a **Revenue Operat
 
 ## Authentication & Security
 
-The server supports two ways of providing API Keys:
-1.  **Environment Variables (Recommended)**: Set `ARARA_API_KEY` and `ABACATE_API_KEY` in your environment or a `.env` file inside the `ararahq-mcp` folder.
-2.  **Tool Parameters**: You can pass the `apiKey` directly to any tool call if needed (useful for multi-tenant scenarios).
+This server supports two hosting models:
+
+1.  **Dedicated / Private Hosting**: Best for personal use or internal teams. Set `ARARA_API_KEY` and `ABACATE_API_KEY` in your environment. The server will use these keys for all requests by default.
+2.  **Shared / Public Hosting (mcp.ararahq.com)**: Best for public distribution. Do **not** set global environment variables. Users must provide their own `apiKey` to each tool call.
+
+All tools accept an optional `apiKey` parameter which overrides environment variables.
 
 ## Installation
 

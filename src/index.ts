@@ -362,7 +362,8 @@ async function run() {
 
     const port = process.env.PORT || 3333;
     app.listen(port, () => {
-      console.error(`Arara Revenue OS MCP Server running on SSE at http://localhost:${port}`);
+      const mode = (process.env.ARARA_API_KEY || process.env.ABACATE_API_KEY) ? "DEDICATED" : "SHARED/MULTI-TENANT";
+      console.error(`Arara Revenue OS MCP Server running on SSE at http://localhost:${port} [Mode: ${mode}]`);
     });
   } else {
     const transport = new StdioServerTransport();
