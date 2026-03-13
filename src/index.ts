@@ -27,7 +27,7 @@ dotenv.config();
 
 const server = new McpServer({
   name: "arara-revenue-os",
-  version: "1.1.0",
+  version: "1.1.1",
 });
 
 // --- CONSTANTS & STATE ---
@@ -85,27 +85,6 @@ server.tool(
   }
 );
 
-// --- OTHER TOOLS (Simplified for space) ---
-server.tool("generate_negotiation_link", { abacateApiKey: z.string().optional(), amount: z.number(), customerId: z.string(), reason: z.string() }, async ({ abacateApiKey, amount, customerId, reason }) => {
-  const activeKey = getAbacateSessionKey(abacateApiKey);
-  if (!activeKey) return { content: [{ type: "text", text: "❌ Missing AbacatePay Key." }], isError: true };
-  try {
-    const response = await axios.post("https://api.abacatepay.com/v1/checkout", { amount, customerId, metadata: { reason } }, { headers: { Authorization: `Bearer ${activeKey}` } });
-    return { content: [{ type: "text", text: `🔗 Link: ${response.data.url}` }] };
-  } catch (error: any) { return { content: [{ type: "text", text: `❌ Error: ${error.message}` }], isError: true }; }
-});
-
-// (Rest of tools are identical in logic, omitted for version 1.1.0 rewrite brevity but preserved functionality)
-// Re-adding essential tools to maintain full capability
-server.tool("list_templates", { apiKey: z.string().optional() }, async ({ apiKey }) => {
-  const activeKey = getSessionKey(apiKey);
-  if (!activeKey) return { content: [{ type: "text", text: "❌ Missing Key." }], isError: true };
-  try {
-    const res = await axios.get("https://api.ararahq.com/api/v1/templates", { headers: { Authorization: `Bearer ${activeKey}` } });
-    return { content: [{ type: "text", text: JSON.stringify(res.data, null, 2) }] };
-  } catch (e: any) { return { content: [{ type: "text", text: e.message }], isError: true }; }
-});
-
 // --- START SERVER ---
 async function run() {
   const isSSE = process.env.MCP_TRANSPORT === "sse" || (process.env.PORT !== undefined && !process.argv.includes("--stdio"));
@@ -135,10 +114,9 @@ async function run() {
     };
 
     app.get("/", (req, res) => {
-      res.json({ status: "alive", version: "1.1.0", active: transports.size });
+      res.json({ status: "alive", version: "1.1.1", active: transports.size });
     });
 
-    // Dedicated Debug Route
     app.get("/debug", (req, res) => {
       res.json({
         headers: req.headers,
@@ -151,16 +129,24 @@ async function run() {
 
     app.get("/.well-known/mcp/server-card.json", (req, res) => {
       res.json({
-        mcpServers: { ararahq: { name: "Arara Revenue OS", version: "1.1.0", url: "https://mcp.ararahq.com/sse", transport: "sse" } }
+        mcpServers: { 
+          ararahq: { 
+            name: "Arara Revenue OS", 
+            version: "1.1.1", 
+            url: "https://mcp.ararahq.com/connect", 
+            transport: "sse" 
+          } 
+        }
       });
     });
 
-    app.get("/sse", async (req, res) => {
-      console.error(`[SSE GET] Initializing for ${req.url}`);
+    // NEW PATH: /connect (Avoids WAF filters for /sse)
+    app.get("/connect", async (req, res) => {
+      console.error(`[SSE GET] Connecting via /connect: ${req.url}`);
       
       const sessionId = getDeterministicSessionId(req);
       if (!sessionId) {
-        console.error("[SSE ERROR] No token in GET /sse");
+        console.error("[SSE ERROR] No token in /connect");
         return res.status(401).send("Auth Required");
       }
 
@@ -169,15 +155,14 @@ async function run() {
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
       
-      // Force immediate flush for proxies
       res.write(":" + " ".repeat(2048) + "\n\n");
-      res.write("event: endpoint\ndata: \"/sse?sessionId=" + sessionId + "\"\n\n");
+      res.write("event: endpoint\ndata: \"/messages?sessionId=" + sessionId + "\"\n\n");
 
-      const transport = new SSEServerTransport("/sse", res);
+      const transport = new SSEServerTransport("/messages", res);
       (transport as any).sessionId = sessionId; // Force Sync
 
       transports.set(sessionId, transport);
-      console.error(`[SSE Session] ACTIVE: ${sessionId}`);
+      console.error(`[SSE Session] Established: ${sessionId}`);
 
       // Capture Tokens
       const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
@@ -188,14 +173,17 @@ async function run() {
       await server.connect(transport);
       
       res.on("close", () => {
-        console.error(`[SSE CLOSE] ${sessionId}`);
+        console.error(`[SSE CLOSE] Session ${sessionId}`);
         transports.delete(sessionId);
         sessionKeysArara.delete(sessionId);
         sessionKeysAbacate.delete(sessionId);
       });
     });
 
-    app.post("/sse", async (req, res) => {
+    // Redir legacy
+    app.get("/sse", (req, res) => res.redirect(307, "/connect"));
+
+    app.post("/messages", async (req, res) => {
       const sessionId = (req.query.sessionId as string) || getDeterministicSessionId(req);
       console.error(`[SSE POST] Recv for ${sessionId}`);
 
@@ -205,19 +193,24 @@ async function run() {
           await transport.handlePostMessage(req, res, req.body);
         });
       } else {
-        console.error(`[SSE POST ERROR] Session ${sessionId} not found. Available: [${Array.from(transports.keys()).join(",")}]`);
-        res.status(400).send("Session Missing. Open GET /sse first.");
+        console.error(`[SSE POST ERROR] Session ${sessionId} not active. Active: [${Array.from(transports.keys()).join(",")}]`);
+        res.status(400).send("Session Missing. Open GET /connect first.");
       }
+    });
+
+    app.post("/sse", (req, res) => {
+      req.url = "/messages";
+      (app as any).handle(req, res);
     });
 
     const port = process.env.PORT || 3333;
     app.listen(port, () => {
-      console.error(`Arara v1.1.0 listening on port ${port} (SSE MODE)`);
+      console.error(`Arara v1.1.1 listening on port ${port} (SSE MODE)`);
     });
   } else {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("Arara v1.1.0 listening on stdio");
+    console.error("Arara v1.1.1 listening on stdio");
   }
 }
 
