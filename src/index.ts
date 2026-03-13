@@ -404,15 +404,23 @@ async function run() {
   if (isSSE) {
     const app = express();
     app.use(cors());
+    app.use(express.json()); // MANDATORY for MCP POST messages
+    app.use(express.urlencoded({ extended: true }));
 
     const transports = new Map<string, SSEServerTransport>();
+
+    // Root handler for status checks
+    app.get("/", (req, res) => {
+      res.json({ status: "alive", name: "Arara Revenue OS MCP", mode: !IS_SHARED_MODE ? "DEDICATED" : "SHARED" });
+    });
 
     app.get("/sse", async (req, res) => {
       // Priority: Custom Headers > Authorization Header > Query Param
       const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
       const abacateToken = (req.headers['x-abacate-key'] as string);
       
-      const transport = new SSEServerTransport("/messages", res);
+      // We point messages back to the same /sse path but via POST
+      const transport = new SSEServerTransport("/sse", res);
       
       const sessionId = (transport as any).sessionId || Math.random().toString(36).substring(7);
       transports.set(sessionId, transport);
@@ -437,12 +445,11 @@ async function run() {
       });
     });
 
-    app.post("/messages", async (req, res) => {
+    app.post("/sse", async (req, res) => {
       const sessionId = req.query.sessionId as string;
       const transport = transports.get(sessionId);
 
       if (transport) {
-        // Wrap the message handling in the session context so tool handlers can access it
         await sessionContext.run({ sessionId }, async () => {
           await transport.handlePostMessage(req, res);
         });
