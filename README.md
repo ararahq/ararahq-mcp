@@ -18,10 +18,36 @@ This server supports two hosting models:
 
 All tools accept an optional `apiKey` parameter which overrides environment variables.
 
-## Installation
+## Installation & Connection
 
-### 1. Claude Desktop (World-wide)
+### 1. Mode: Hosted (Recommended)
+The fastest way to use the Arara MCP is via our official hosted instance. You don't need to install anything locally.
+
+#### Claude Desktop
 Add this to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "ararahq": {
+      "url": "https://mcp.ararahq.com/sse",
+      "headers": {
+        "X-Arara-Key": "YOUR_ARARA_API_KEY"
+      }
+    }
+  }
+}
+```
+
+#### Cursor
+Go to **Settings > Models > MCP Servers** and add a new `SSE` server:
+- **Name**: AraraHQ
+- **URL**: `https://mcp.ararahq.com/sse`
+
+---
+
+### 2. Mode: Local (Private)
+If you prefer to run the server locally using `npx`:
 
 ```json
 {
@@ -37,27 +63,6 @@ Add this to your `claude_desktop_config.json`:
   }
 }
 ```
-
-#### Shared Hosting (mcp.ararahq.com)
-If you are using a shared instance, configure the `Authorization` header:
-
-```json
-{
-  "mcpServers": {
-    "ararahq": {
-      "url": "https://mcp.ararahq.com/sse",
-      "headers": {
-        "X-Arara-Key": "YOUR_ARARA_API_KEY"
-      }
-    }
-  }
-}
-```
-
-### 2. Cursor
-Go to **Settings > Models > MCP Servers** and add a new `command` server:
-- **Name**: AraraHQ
-- **Command**: `npx -y ararahq-mcp`
 
 ---
 
