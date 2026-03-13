@@ -130,15 +130,15 @@ async function run() {
     });
 
     app.get("/.well-known/mcp/server-card.json", (req, res) => {
-      console.error(`[CARD] Fetching server card from ${req.ip}`);
+      console.error(`[CARD] Fetching from ${req.ip}`);
       const host = req.get('host') || "mcp.ararahq.com";
-      const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      const protocol = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
       res.json({
         mcpServers: {
           ararahq: {
             name: "Arara Revenue OS",
             version: "1.1.1",
-            url: `${protocol}://${host}/connect`,
+            url: `${protocol}://${host}/sse`,
             transport: "sse"
           }
         }
@@ -175,16 +175,16 @@ async function run() {
         console.error(`[SSE DEBUG] Connecting dedicated server to transport for ${sessionId}`);
         await sessionServer.connect(transport);
         
-        // Final flush trigger / preamble
-        res.write(":" + " ".repeat(1024) + "\n\n");
+        // Final flush trigger / small preamble
+        res.write(":" + " ".repeat(128) + "\n\n");
         console.error(`[SSE DEBUG] Session ready: ${sessionId}`);
 
-        // Heartbeat every 10s
+        // Heartbeat every 20s to stay alive without spamming
         const heartbeat = setInterval(() => {
           if (!res.writableEnded) {
             res.write(": keep-alive\n\n");
           }
-        }, 10000);
+        }, 20000);
         
         res.on("close", () => {
           console.error(`[SSE CLOSE] Session ${sessionId}`);
@@ -224,28 +224,17 @@ async function run() {
       }
     };
 
-    // NEW PATH: /connect (Avoids WAF filters for /sse)
-    app.all("/connect", (req, res) => { handleConnect(req, res); });
-
-    // Redir legacy or handle POST init
+    // Simplified routing for Smithery / legacy
     app.all("/sse", (req, res) => {
-      const isSSEInit = req.headers.accept?.includes("text/event-stream");
-
-      if (req.method === "GET") {
-        return res.redirect(307, "/connect");
-      }
-
-      if (req.method === "POST" && isSSEInit) {
-        console.error("[SSE REDIR] POST /sse with event-stream -> handleConnect");
-        return handleConnect(req, res);
-      }
-
-      // Default: POST messages
-      console.error("[SSE REDIR] POST /sse -> handleMessage");
+      const isSSEInit = req.headers.accept?.includes("text/event-stream") || req.method === "GET";
+      if (isSSEInit) return handleConnect(req, res);
       return handleMessage(req, res);
     });
 
-    app.post("/messages", (req, res) => { handleMessage(req, res); });
+    app.all("/connect", (req, res) => { handleConnect(req, res); });
+    app.all("/messages", (req, res) => { handleMessage(req, res); });
+
+    app.all("/messages", (req, res) => { handleMessage(req, res); });
 
     const port = process.env.PORT || 3333;
     app.listen(port, () => {
