@@ -360,7 +360,7 @@ async function run() {
       }
     });
 
-    const port = process.env.PORT || 8080;
+    const port = process.env.PORT || 3333;
     app.listen(port, () => {
       console.error(`Arara Revenue OS MCP Server running on SSE at http://localhost:${port}`);
     });

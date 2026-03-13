@@ -32,7 +32,7 @@ COPY --from=builder /app/build ./build
 RUN npm install --omit=dev
 
 # Standard MCP port (dedicated for Arara MCP)
-EXPOSE 8080
+EXPOSE 3333
 
 # Default command (stdio)
 # To run as SSE, you can override this with: --transport sse (once implemented)

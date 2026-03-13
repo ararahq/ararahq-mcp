@@ -48,7 +48,7 @@ docker build -t ararahq-mcp .
 
 # 2. Run as Server (SSE)
 # The container automatically detects the PORT variable
-docker run -p 8080:8080 -e PORT=8080 ararahq-mcp
+docker run -p 3333:3333 -e PORT=3333 ararahq-mcp
 ```
 
 ### Local Development
@@ -58,7 +58,7 @@ npm run build
 node build/index.js --transport sse
 ```
 
-(The server will run on `http://localhost:8080` by default)
+(The server will run on `http://localhost:3333` by default)
 
 ---
 
