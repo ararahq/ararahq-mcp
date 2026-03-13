@@ -405,8 +405,8 @@ async function run() {
     const transports = new Map<string, SSEServerTransport>();
 
     app.get("/sse", async (req, res) => {
-      // Priority: Header > Query Param
-      const authHeader = req.headers.authorization || (req.query.Authorization as string);
+      // Priority: X-Arara-Key Header > Authorization Header > Query Param
+      const authHeader = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
       const transport = new SSEServerTransport("/messages", res);
       
       const sessionId = (transport as any).sessionId || Math.random().toString(36).substring(7);
