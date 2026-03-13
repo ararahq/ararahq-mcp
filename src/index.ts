@@ -415,6 +415,7 @@ async function run() {
     });
 
     app.get("/sse", async (req, res) => {
+      console.error(`[SSE GET] New connection from ${req.ip}`);
       // Priority: Custom Headers > Authorization Header > Query Param
       const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
       const abacateToken = (req.headers['x-abacate-key'] as string);
@@ -424,6 +425,7 @@ async function run() {
       
       const sessionId = (transport as any).sessionId || Math.random().toString(36).substring(7);
       transports.set(sessionId, transport);
+      console.error(`[SSE GET] Session created: ${sessionId}`);
 
       if (araraToken) {
         const token = araraToken.startsWith("Bearer ") ? araraToken.split(" ")[1] : araraToken;
@@ -439,6 +441,7 @@ async function run() {
       await server.connect(transport);
       
       res.on("close", () => {
+        console.error(`[SSE CLOSE] Session ended: ${sessionId}`);
         transports.delete(sessionId);
         sessionKeysArara.delete(sessionId);
         sessionKeysAbacate.delete(sessionId);
@@ -447,6 +450,7 @@ async function run() {
 
     app.post("/sse", async (req, res) => {
       const sessionId = req.query.sessionId as string;
+      console.error(`[SSE POST] Message for session: ${sessionId}. Active sessions: ${Array.from(transports.keys()).join(", ")}`);
       const transport = transports.get(sessionId);
 
       if (transport) {
@@ -454,6 +458,7 @@ async function run() {
           await transport.handlePostMessage(req, res);
         });
       } else {
+        console.error(`[SSE POST ERROR] Session ${sessionId} not found.`);
         res.status(400).send("No active SSE session for this ID");
       }
     });
