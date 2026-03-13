@@ -452,23 +452,24 @@ async function run() {
     });
 
     app.post("/sse", async (req, res) => {
-      console.error(`[SSE POST] ${req.method} ${req.url} (Original: ${req.originalUrl})`);
+      console.error(`[SSE POST] ${req.method} ${req.url} (Original: ${req.originalUrl}). Body: ${JSON.stringify(req.body)}`);
       
-      // Manual fallback for sessionId parsing (more resilient to proxy weirdness)
       const parsedUrl = url.parse(req.url, true);
+      // Smithery or other clients might pass sessionId in Body if it's not in URL
       const sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || (req.body.sessionId as string) || (req.headers['x-session-id'] as string);
       
       if (!sessionId) {
-        console.error(`[SSE POST ERROR] Request missing sessionId at ${req.url}. Query: ${JSON.stringify(req.query)}. ParsedQuery: ${JSON.stringify(parsedUrl.query)}`);
+        console.error(`[SSE POST ERROR] Request missing sessionId at ${req.url}. Query: ${JSON.stringify(req.query)}. ParsedQuery: ${JSON.stringify(parsedUrl.query)}. Active: ${Array.from(transports.keys()).join(", ")}`);
         return res.status(400).send("Missing sessionId parameter");
       }
 
-      console.error(`[SSE POST] Message for session: ${sessionId}. Active sessions: ${Array.from(transports.keys()).join(", ")}`);
       const transport = transports.get(sessionId);
 
       if (transport) {
         await sessionContext.run({ sessionId }, async () => {
-          await transport.handlePostMessage(req, res);
+          // IMPORTANT: If using express.json(), we MUST pass req.body here
+          // because the middleware already consumed the request stream.
+          await transport.handlePostMessage(req, res, req.body);
         });
       } else {
         console.error(`[SSE POST ERROR] Session ${sessionId} not found in active transports.`);
