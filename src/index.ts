@@ -415,14 +415,13 @@ async function run() {
     });
 
     app.get("/sse", async (req, res) => {
-      console.error(`[SSE GET] New connection from ${req.ip}`);
-      // Priority: X-Arara-Key Header > Authorization Header > Query Param
+      console.error(`[SSE GET] ${req.method} ${req.originalUrl} from ${req.ip}`);
+      // Priority: Custom Headers > Authorization Header > Query Param
       const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
       const abacateToken = (req.headers['x-abacate-key'] as string);
       
       const transport = new SSEServerTransport("/sse", res);
       
-      // The SDK generates a sessionId in the constructor. We must use it.
       const sessionId = transport.sessionId; 
       if (!sessionId) {
         console.error("[SSE ERROR] SDK failed to generate a sessionId!");
@@ -452,11 +451,12 @@ async function run() {
     });
 
     app.post("/sse", async (req, res) => {
+      console.error(`[SSE POST] ${req.method} ${req.originalUrl}`);
       // Look for sessionId in query params (standard), then body, then headers
       const sessionId = (req.query.sessionId as string) || (req.body.sessionId as string) || (req.headers['x-session-id'] as string);
       
       if (!sessionId) {
-        console.error(`[SSE POST ERROR] Request missing sessionId. Query: ${JSON.stringify(req.query)}, Headers: ${JSON.stringify(req.headers)}`);
+        console.error(`[SSE POST ERROR] Request missing sessionId at ${req.originalUrl}. Headers: ${JSON.stringify(req.headers)}`);
         return res.status(400).send("Missing sessionId parameter");
       }
 
