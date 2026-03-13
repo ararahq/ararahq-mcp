@@ -91,7 +91,7 @@ async function run() {
 
   if (isSSE) {
     const app = express();
-    
+
     // RAW DEBUGGING - BEFORE EVERYTHING
     app.use((req, res, next) => {
       console.error(`[RAW] ${req.method} ${req.url} | Accept: ${req.headers.accept}`);
@@ -132,23 +132,27 @@ async function run() {
       const host = req.get('host') || "mcp.ararahq.com";
       const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
       res.json({
-        mcpServers: { 
-          ararahq: { 
-            name: "Arara Revenue OS", 
-            version: "1.1.1", 
-            url: `${protocol}://${host}/connect`, 
-            transport: "sse" 
-          } 
+        mcpServers: {
+          ararahq: {
+            name: "Arara Revenue OS",
+            version: "1.1.1",
+            url: `${protocol}://${host}/connect`,
+            transport: "sse"
+          }
         }
       });
     });
 
     const handleConnect = async (req: express.Request, res: express.Response) => {
       try {
-        console.error(`[SSE DEBUG] Initializing session via ${req.method}`);
+        console.error(`[SSE DEBUG] Initializing session via ${req.method} from ${req.ip}`);
+
+        // PROXY PREP: Disable buffering for Nginx/Cloudflare
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
 
         const transport = new SSEServerTransport("/messages", res);
-        const sessionId = transport.sessionId; // Let SDK decide the ID
+        const sessionId = transport.sessionId;
 
         transports.set(sessionId, transport);
         console.error(`[SSE Session] Established: ${sessionId}`);
@@ -160,16 +164,23 @@ async function run() {
         if (abacateToken) sessionKeysAbacate.set(sessionId, abacateToken.toString().replace(/^Bearer\s+/i, '').trim());
 
         console.error(`[SSE DEBUG] Connecting server to transport for ${sessionId}`);
-        
-        // NOTE: McpServer (v1.x) typically supports only one active transport.
-        // If this is a shared server, you may see "Already connected" errors
-        // for concurrent sessions. This is a limitation of the current SDK usage.
         await server.connect(transport);
+
+        // PREAMBLE: 2KB to force some proxies to flush (sent after headers)
+        res.write(":" + " ".repeat(2048) + "\n\n");
         
         console.error(`[SSE DEBUG] Server connected to transport for ${sessionId}`);
+
+        // HEARTBEAT (15s): Keeps the connection alive
+        const heartbeat = setInterval(() => {
+          if (!res.writableEnded) {
+            res.write(": keep-alive\n\n");
+          }
+        }, 15000);
         
         res.on("close", () => {
           console.error(`[SSE CLOSE] Session ${sessionId}`);
+          clearInterval(heartbeat);
           transports.delete(sessionId);
           sessionKeysArara.delete(sessionId);
           sessionKeysAbacate.delete(sessionId);
@@ -210,7 +221,7 @@ async function run() {
     // Redir legacy or handle POST init
     app.all("/sse", (req, res) => {
       const isSSEInit = req.headers.accept?.includes("text/event-stream");
-      
+
       if (req.method === "GET") {
         return res.redirect(307, "/connect");
       }
