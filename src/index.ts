@@ -10,6 +10,7 @@ import dotenv from "dotenv";
 import fs from "fs-extra";
 import path from "path";
 import { AsyncLocalStorage } from "async_hooks";
+import * as url from "node:url";
 
 // --- CONTEXT ---
 const sessionContext = new AsyncLocalStorage<{ sessionId: string }>();
@@ -451,12 +452,14 @@ async function run() {
     });
 
     app.post("/sse", async (req, res) => {
-      console.error(`[SSE POST] ${req.method} ${req.originalUrl}`);
-      // Look for sessionId in query params (standard), then body, then headers
-      const sessionId = (req.query.sessionId as string) || (req.body.sessionId as string) || (req.headers['x-session-id'] as string);
+      console.error(`[SSE POST] ${req.method} ${req.url} (Original: ${req.originalUrl})`);
+      
+      // Manual fallback for sessionId parsing (more resilient to proxy weirdness)
+      const parsedUrl = url.parse(req.url, true);
+      const sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || (req.body.sessionId as string) || (req.headers['x-session-id'] as string);
       
       if (!sessionId) {
-        console.error(`[SSE POST ERROR] Request missing sessionId at ${req.originalUrl}. Headers: ${JSON.stringify(req.headers)}`);
+        console.error(`[SSE POST ERROR] Request missing sessionId at ${req.url}. Query: ${JSON.stringify(req.query)}. ParsedQuery: ${JSON.stringify(parsedUrl.query)}`);
         return res.status(400).send("Missing sessionId parameter");
       }
 
