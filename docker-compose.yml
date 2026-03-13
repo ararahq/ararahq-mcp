@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  ararahq-mcp:
+    build: .
+    container_name: ararahq-mcp
+    ports:
+      - "3333:3333"
+    environment:
+      - PORT=3333
+      - MCP_TRANSPORT=sse
+      - ARARA_API_KEY=${ARARA_API_KEY}
+      - ABACATE_API_KEY=${ABACATE_API_KEY}
+    restart: unless-stopped
