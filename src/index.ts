@@ -11,6 +11,7 @@ import fs from "fs-extra";
 import path from "path";
 import { AsyncLocalStorage } from "async_hooks";
 import * as url from "node:url";
+import crypto from "node:crypto";
 
 // --- CONTEXT ---
 const sessionContext = new AsyncLocalStorage<{ sessionId: string }>();
@@ -416,8 +417,17 @@ async function run() {
 
     const transports = new Map<string, SSEServerTransport>();
 
+    const getDeterministicSessionId = (req: express.Request): string | null => {
+      const araraToken = (req.headers['x-arara-key'] as string) || req.headers.authorization || (req.query.Authorization as string);
+      const abacateToken = (req.headers['x-abacate-key'] as string);
+      const token = araraToken || abacateToken;
+      if (!token) return null;
+      const seed = token.startsWith("Bearer ") ? token.split(" ")[1] : token;
+      return "v-" + crypto.createHash('md5').update(seed).digest('hex').substring(0, 12);
+    };
+
     app.get("/", (req, res) => {
-      res.json({ status: "alive", mode: "SHARED", version: "1.0.4" });
+      res.json({ status: "alive", mode: "SHARED", version: "1.0.5" });
     });
 
     // Smithery skip-scan configuration
@@ -426,7 +436,7 @@ async function run() {
         mcpServers: {
           ararahq: {
             name: "Arara Revenue OS",
-            version: "1.0.4",
+            version: "1.0.5",
             url: "https://mcp.ararahq.com/sse",
             transport: "sse"
           }
@@ -435,7 +445,7 @@ async function run() {
     });
 
     app.get("/sse", async (req, res) => {
-      console.error(`[SSE Connection] GET ${req.originalUrl}`);
+      console.error(`[SSE Connection] GET ${req.url}`);
       // Aggressive headers to bypass ALL proxies
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -445,7 +455,8 @@ async function run() {
       res.setHeader('X-Accel-Buffering', 'no');
       
       const transport = new SSEServerTransport("/sse", res);
-      const sessionId = transport.sessionId;
+      // Use deterministic ID if possible, otherwise SDK default
+      const sessionId = getDeterministicSessionId(req) || transport.sessionId;
       
       if (!sessionId) {
         console.error("[SSE] Failed to generate sessionId");
@@ -480,24 +491,26 @@ async function run() {
     });
 
     app.post("/sse", async (req, res) => {
-      // Robust session ID extraction
       const parsedUrl = url.parse(req.url, true);
-      const sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || (req.body.sessionId as string);
+      // Priority: URL sessionId > Deterministic SessionId (from tokens) > Body
+      let sessionId = (req.query.sessionId as string) || (parsedUrl.query.sessionId as string) || getDeterministicSessionId(req) || (req.body.sessionId as string);
       
       if (!sessionId) {
-        console.error(`[SSE POST ERROR] Missing sessionId. URL was: ${req.url}`);
+        console.error(`[SSE POST ERROR] Missing sessionId. URL: ${req.url}`);
         return res.status(400).send("Session ID required");
       }
 
       const transport = transports.get(sessionId);
-      if (transport) {
-        await sessionContext.run({ sessionId }, async () => {
-          await transport.handlePostMessage(req, res, req.body);
-        });
-      } else {
-        console.error(`[SSE POST ERROR] Session ${sessionId} not active. Known: ${Array.from(transports.keys()).join(",")}`);
-        res.status(400).send("Session not found");
+
+      if (!transport) {
+        console.error(`[SSE POST ERROR] Session ${sessionId} not active. Known: [${Array.from(transports.keys()).join(",")}]`);
+        return res.status(400).send("Session not established. Ensure you connect via GET /sse first.");
       }
+
+      await sessionContext.run({ sessionId }, async () => {
+        // Pass req.body because express.json() consumed the original stream
+        await transport.handlePostMessage(req, res, req.body);
+      });
     });
 
     const port = process.env.PORT || 3333;
