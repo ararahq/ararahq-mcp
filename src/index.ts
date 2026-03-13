@@ -60,30 +60,32 @@ const guardianFilter = (text: string): { safe: boolean; reason?: string } => {
   return { safe: true };
 };
 
-// --- TOOL: Smart Message Sending ---
-server.tool(
-  "send_smart_message",
-  {
-    apiKey: z.string().optional().describe("Arara API Key"),
-    to: z.string().describe("Recipient phone number"),
-    text: z.string().describe("Message content"),
-    skipGuardian: z.boolean().optional().default(false)
-  },
-  async ({ apiKey, to, text, skipGuardian }) => {
-    const activeKey = getSessionKey(apiKey);
-    if (!activeKey) return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
-    if (!skipGuardian) {
-      const check = guardianFilter(text);
-      if (!check.safe) return { content: [{ type: "text", text: `🚨 GUARDIAN: ${check.reason}` }], isError: true };
+// --- TOOL REGISTRY ---
+function registerTools(serverInstance: McpServer) {
+  serverInstance.tool(
+    "send_smart_message",
+    {
+      apiKey: z.string().optional().describe("Arara API Key"),
+      to: z.string().describe("Recipient phone number"),
+      text: z.string().describe("Message content"),
+      skipGuardian: z.boolean().optional().default(false)
+    },
+    async ({ apiKey, to, text, skipGuardian }) => {
+      const activeKey = getSessionKey(apiKey);
+      if (!activeKey) return { content: [{ type: "text", text: "❌ Missing Arara API Key." }], isError: true };
+      if (!skipGuardian) {
+        const check = guardianFilter(text);
+        if (!check.safe) return { content: [{ type: "text", text: `🚨 GUARDIAN: ${check.reason}` }], isError: true };
+      }
+      try {
+        const response = await axios.post("https://api.ararahq.com/api/v1/messages", { receiver: to, body: text }, { headers: { Authorization: `Bearer ${activeKey}` } });
+        return { content: [{ type: "text", text: `✅ Sent. ID: ${response.data.id}` }] };
+      } catch (error: any) {
+        return { content: [{ type: "text", text: `❌ Error: ${error.response?.data?.message || error.message}` }], isError: true };
+      }
     }
-    try {
-      const response = await axios.post("https://api.ararahq.com/api/v1/messages", { receiver: to, body: text }, { headers: { Authorization: `Bearer ${activeKey}` } });
-      return { content: [{ type: "text", text: `✅ Sent. ID: ${response.data.id}` }] };
-    } catch (error: any) {
-      return { content: [{ type: "text", text: `❌ Error: ${error.response?.data?.message || error.message}` }], isError: true };
-    }
-  }
-);
+  );
+}
 
 // --- START SERVER ---
 async function run() {
@@ -163,20 +165,26 @@ async function run() {
         if (araraToken) sessionKeysArara.set(sessionId, araraToken.toString().replace(/^Bearer\s+/i, '').trim());
         if (abacateToken) sessionKeysAbacate.set(sessionId, abacateToken.toString().replace(/^Bearer\s+/i, '').trim());
 
-        console.error(`[SSE DEBUG] Connecting server to transport for ${sessionId}`);
-        await server.connect(transport);
+        // Dedicated server for each session to allow concurrency in SDK v1.x
+        const sessionServer = new McpServer({
+          name: "arara-revenue-os",
+          version: "1.1.1",
+        });
+        registerTools(sessionServer);
 
-        // PREAMBLE: 2KB to force some proxies to flush (sent after headers)
-        res.write(":" + " ".repeat(2048) + "\n\n");
+        console.error(`[SSE DEBUG] Connecting dedicated server to transport for ${sessionId}`);
+        await sessionServer.connect(transport);
         
-        console.error(`[SSE DEBUG] Server connected to transport for ${sessionId}`);
+        // Final flush trigger / preamble
+        res.write(":" + " ".repeat(1024) + "\n\n");
+        console.error(`[SSE DEBUG] Session ready: ${sessionId}`);
 
-        // HEARTBEAT (15s): Keeps the connection alive
+        // Heartbeat every 10s
         const heartbeat = setInterval(() => {
           if (!res.writableEnded) {
             res.write(": keep-alive\n\n");
           }
-        }, 15000);
+        }, 10000);
         
         res.on("close", () => {
           console.error(`[SSE CLOSE] Session ${sessionId}`);
@@ -184,6 +192,7 @@ async function run() {
           transports.delete(sessionId);
           sessionKeysArara.delete(sessionId);
           sessionKeysAbacate.delete(sessionId);
+          sessionServer.close().catch(() => {});
         });
       } catch (error: any) {
         console.error(`[SSE FATAL ERROR] in handleConnect: ${error.message}`);
@@ -243,6 +252,7 @@ async function run() {
       console.error(`Arara v1.1.1 listening on port ${port} (SSE MODE)`);
     });
   } else {
+    registerTools(server);
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("Arara v1.1.1 listening on stdio");
