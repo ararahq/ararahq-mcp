@@ -125,22 +125,27 @@ async function run() {
     <style>
         :root { --primary: #FF6B00; --bg: #050505; --text: #FFFFFF; }
         body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
-        .container { text-align: center; position: relative; z-index: 10; padding: 2rem; border-radius: 24px; background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); max-width: 400px; width: 90%; }
-        .logo { font-size: 2.5rem; font-weight: 800; letter-spacing: -1px; margin-bottom: 0.5rem; background: linear-gradient(135deg, #fff 0%, var(--primary) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .status { display: inline-flex; align-items: center; gap: 8px; background: rgba(0, 255, 128, 0.1); color: #00FF80; padding: 8px 16px; border-radius: 99px; font-size: 0.85rem; font-weight: 600; margin-bottom: 1.5rem; }
-        .dot { width: 8px; height: 8px; background: #00FF80; border-radius: 50%; box-shadow: 0 0 10px #00FF80; animation: pulse 2s infinite; }
-        p { opacity: 0.6; line-height: 1.6; font-size: 0.95rem; }
-        .glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; height: 300px; background: var(--primary); filter: blur(120px); opacity: 0.15; z-index: 1; pointer-events: none; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        .container { text-align: center; position: relative; z-index: 10; padding: 2.5rem; border-radius: 32px; background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 40px 60px -15px rgba(0, 0, 0, 0.7); max-width: 420px; width: 90%; animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+        .logo { font-size: 3rem; font-weight: 900; letter-spacing: -2px; margin-bottom: 0.5rem; background: linear-gradient(135deg, #fff 0%, var(--primary) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .status { display: inline-flex; align-items: center; gap: 8px; background: rgba(0, 255, 128, 0.1); color: #00FF80; padding: 10px 20px; border-radius: 99px; font-size: 0.9rem; font-weight: 700; margin-bottom: 2rem; border: 1px solid rgba(0, 255, 128, 0.2); }
+        .dot { width: 10px; height: 10px; background: #00FF80; border-radius: 50%; box-shadow: 0 0 15px #00FF80; animation: pulse 1.5s infinite; }
+        p { opacity: 0.7; line-height: 1.6; font-size: 1rem; margin-bottom: 2rem; }
+        .btn { background: var(--primary); color: white; border: none; padding: 14px 28px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: transform 0.2s, background 0.2s; font-size: 1rem; text-decoration: none; display: inline-block; }
+        .btn:hover { background: #E65A00; transform: translateY(-2px); }
+        .btn:active { transform: translateY(0); }
+        .glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; height: 400px; background: var(--primary); filter: blur(140px); opacity: 0.2; z-index: 1; pointer-events: none; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.5; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
     <div class="glow"></div>
     <div class="container">
         <div class="logo">Arara OS</div>
-        <div class="status"><span class="dot"></span> Active Transport (SSE)</div>
-        <p>The Universal MCP Bridge is active and ready.<br><b>${sessions}</b> concurrent sessions established.</p>
-        <p style="font-size: 0.75rem; margin-top: 2rem;">© 2026 Arara HQ / AbacatePay</p>
+        <div class="status"><span class="dot"></span> Online & Optimized</div>
+        <p>The Universal MCP Bridge is active.<br>Ready for <b>Smithery</b> and <b>Claude</b>.</p>
+        <button class="btn" onclick="window.close()">Finish Setup</button>
+        <p style="font-size: 0.75rem; margin-top: 2.5rem; opacity: 0.4;">© 2026 Arara HQ • v1.1.1</p>
     </div>
 </body>
 </html>`;
@@ -180,6 +185,9 @@ async function run() {
 
     const handleConnect = async (req: express.Request, res: express.Response) => {
       try {
+        if (req.headers.accept?.includes("text/html")) {
+          return res.send(getLandingPage(transports.size));
+        }
         console.error(`[SSE DEBUG] Initializing session via ${req.method} from ${req.ip}`);
 
         // PROXY PREP: Disable buffering for Nginx/Cloudflare
@@ -265,8 +273,6 @@ async function run() {
     });
 
     app.all("/connect", (req, res) => { handleConnect(req, res); });
-    app.all("/messages", (req, res) => { handleMessage(req, res); });
-
     app.all("/messages", (req, res) => { handleMessage(req, res); });
 
     const port = process.env.PORT || 3333;
