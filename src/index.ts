@@ -18,7 +18,10 @@ const sessionContext = new AsyncLocalStorage<{ sessionId: string }>();
 const sessionKeysArara = new Map<string, string>();
 const sessionKeysAbacate = new Map<string, string>();
 
+const originalLog = console.log;
+console.log = () => {};
 dotenv.config();
+console.log = originalLog;
 
 /**
  * Arara Universal MCP Server
