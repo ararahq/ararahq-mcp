@@ -17,7 +17,7 @@ dotenv.config();
 console.log = originalLog;
 
 // --- CONSTANTS ---
-const ARARA_BASE = "https://api.ararahq.com/api";
+const ARARA_BASE = process.env.ARARA_BASE_URL || "https://api.ararahq.com/api";
 const ABACATE_BASE = "https://api.abacatepay.com/v2";
 const SERVER_VERSION = "2.1.0";
 
