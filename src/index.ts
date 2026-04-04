@@ -1100,7 +1100,7 @@ function registerTools(serverInstance: McpServer) {
       try {
         switch (action) {
           case "list": {
-            const response = await axios.get(`${ARARA_BASE}/api-keys`, { headers });
+            const response = await axios.get(`${ARARA_BASE}/v1/api-keys`, { headers });
             const keys: any[] = response.data?.data ?? response.data ?? [];
             if (keys.length === 0) return successResponse("No API keys found.");
             const lines = keys.map((k: any) =>
@@ -1111,7 +1111,7 @@ function registerTools(serverInstance: McpServer) {
           case "create": {
             const body: Record<string, string> = { mode: mode ?? "LIVE" };
             if (keyName) body.name = keyName;
-            const response = await axios.post(`${ARARA_BASE}/api-keys`, body, { headers });
+            const response = await axios.post(`${ARARA_BASE}/v1/api-keys`, body, { headers });
             return successResponse([
               `✅ API Key created.`,
               `  ID:  ${response.data.id}`,
@@ -1122,7 +1122,7 @@ function registerTools(serverInstance: McpServer) {
           }
           case "revoke": {
             if (!keyId) return errorResponse("keyId required.");
-            await axios.delete(`${ARARA_BASE}/api-keys/${keyId}`, { headers });
+            await axios.delete(`${ARARA_BASE}/v1/api-keys/${keyId}`, { headers });
             return successResponse(`🗑️ Key ${keyId} revoked.`);
           }
         }
