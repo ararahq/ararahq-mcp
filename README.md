@@ -1,161 +1,269 @@
-# Arara MCP Server
+# Arara MCP
 
 [![npm](https://img.shields.io/npm/v/ararahq-mcp)](https://www.npmjs.com/package/ararahq-mcp)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Docs](https://img.shields.io/badge/Docs-docs.ararahq.com-orange)](https://docs.ararahq.com)
+[![Docs](https://img.shields.io/badge/docs-ararahq.com-orange)](https://docs.ararahq.com)
 
-This MCP server transforms any AI (Claude, Cursor, etc.) into a **Revenue Operating System** powered by [AraraHQ](https://ararahq.com) and AbacatePay. Send WhatsApp messages, recover failed payments, run campaigns, and manage your entire communication stack — all through natural language.
+Turn Claude / Cursor / ChatGPT into a WhatsApp operator that knows your customers, your templates, your wallet, and your funnel. Built by [AraraHQ](https://ararahq.com) — Brazilian CPaaS for WhatsApp, homologated by Meta.
 
-## The 5 Pillars
+**64 tools · 6 resources · 5 guided workflows · OAuth login**
 
-1. **Autonomous Revenue Recovery** — Scan for failed payments and recover revenue automatically
-2. **Atomic Negotiation** — Create payment links and send them via WhatsApp in a single call
-3. **Guardian Mode** — Brand safety firewall that blocks sensitive content in all outbound messages
-4. **Business Memory Layer** — Customer intelligence with sentiment analysis and LTV estimation
-5. **Mass Orchestration** — Campaign dispatch with response triage and auto-handling
+---
 
-## Tools (19 total)
+## Install in 30 seconds
 
-### Guardian Mode (Pillar 3)
+### Claude Desktop / Claude Code
 
-| Tool | Description |
-|------|-------------|
-| `configure_guardian_policy` | Set custom brand safety rules for the session. Built-in rules (CPF, CVV, passwords, API keys) are always active |
-
-### Messaging
-
-| Tool | Description |
-|------|-------------|
-| `send_smart_message` | Send a WhatsApp message to a single recipient. Guardian mode screens content before dispatch |
-| `send_batch_messages` | Send up to 1,000 WhatsApp messages in a single call with Guardian mode screening |
-| `upload_media` | Upload media (image, PDF, video) to Arara storage from a public URL. Returns short URL for use in messages |
-
-### Revenue Recovery (Pillar 1)
-
-| Tool | Description |
-|------|-------------|
-| `autonomous_recovery` | Scan AbacatePay for revenue leaks (pending/expired/cancelled checkouts), enrich with WhatsApp history, and return action briefing with total R$ at risk |
-| `check_revenue_leaks` | Quick scan for AbacatePay revenue leaks. For full briefing with customer context, use `autonomous_recovery` instead |
-
-### Negotiation & Payments (Pillar 2)
-
-| Tool | Description |
-|------|-------------|
-| `atomic_negotiation_cycle` | Full negotiation in one call: creates product on AbacatePay, generates checkout, sends payment link via WhatsApp, returns all tracking IDs |
-| `negotiate_payment` | Create a product and checkout link on AbacatePay. For full atomic cycle that also sends via WhatsApp, use `atomic_negotiation_cycle` |
-| `confirm_payment_handshake` | Verify real-time payment status of an AbacatePay checkout |
-
-### Business Memory (Pillar 4)
-
-| Tool | Description |
-|------|-------------|
-| `build_business_memory` | Deep customer intelligence: analyzes conversation history for sentiment, estimates LTV from payment history, builds structured profile, and optionally persists to knowledge base |
-| `manage_knowledge_base` | Read and write the AI brain knowledge base. Used by `build_business_memory` to persist customer profiles |
-
-### Campaigns (Pillar 5)
-
-| Tool | Description |
-|------|-------------|
-| `create_campaign` | Dispatch a template campaign to a segmented list with individual variables per recipient |
-| `monitor_campaign_responses` | Fetch and triage inbound responses. Classifies as URGENT / COMPLAINT / QUESTION / POSITIVE / ROUTINE. Auto-handles routine, escalates critical |
-
-### Platform Management
-
-| Tool | Description |
-|------|-------------|
-| `get_account_overview` | Full account snapshot: wallet balance, delivery metrics, total spend, delivery rate |
-| `manage_templates` | Full template lifecycle: list, create, check approval status, view analytics, delete |
-| `manage_messages` | List messages from the dashboard or get status of a specific message by ID |
-| `manage_conversations` | List active conversations, get full message history, or reply in an open session window |
-| `manage_organization` | Manage organization settings: phone numbers, webhook config, AI brain, team members |
-| `manage_api_keys` | List, create, or revoke Arara API keys |
-
-## Authentication & Security
-
-Two hosting models:
-
-1. **Private Hosting** — Set `ARARA_API_KEY` and `ABACATE_API_KEY` in your environment. The server uses these for all requests.
-2. **Public Hosting (mcp.ararahq.com)** — Users provide their own `apiKey` to each tool call.
-
-All tools accept an optional `apiKey` parameter which overrides environment variables.
-
-## Installation
-
-### Hosted (Recommended)
-
-No local install needed. Connect directly to our hosted instance.
-
-#### Claude Desktop
-
-Add to your `claude_desktop_config.json`:
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
   "mcpServers": {
-    "ararahq": {
-      "url": "https://mcp.ararahq.com/sse",
-      "headers": {
-        "X-Arara-Key": "YOUR_ARARA_API_KEY"
-      }
-    }
-  }
-}
-```
-
-#### Cursor
-
-Go to **Settings > Models > MCP Servers** and add a new `SSE` server:
-- **Name**: AraraHQ
-- **URL**: `https://mcp.ararahq.com/sse`
-
-### Local (Private)
-
-Run locally using `npx`:
-
-```json
-{
-  "mcpServers": {
-    "ararahq": {
+    "arara": {
       "command": "npx",
-      "args": ["-y", "ararahq-mcp"],
-      "env": {
-        "ARARA_API_KEY": "YOUR_KEY_HERE",
-        "ABACATE_API_KEY": "YOUR_KEY_HERE"
-      }
+      "args": ["-y", "ararahq-mcp"]
     }
   }
 }
 ```
 
-### Docker
+Restart Claude. Type **"log into Arara"** in any conversation — your browser opens, you approve, you're in.
 
-```bash
-docker build -t ararahq-mcp .
-docker run -p 3333:3333 -e PORT=3333 ararahq-mcp
+### Cursor
+
+Settings → MCP → Add server:
+
+```json
+{
+  "arara": {
+    "command": "npx",
+    "args": ["-y", "ararahq-mcp"]
+  }
+}
 ```
 
-### Local Development
+### Hosted (SSE) — no local install
 
-```bash
+Add to your client:
+
+```
+https://mcp.ararahq.com/sse
+```
+
+Authenticate with `x-arara-key: ara_live_...` or the OAuth flow.
+
+### Headless (CI / n8n / server)
+
+Skip OAuth — set the env var and run:
+
+```sh
+ARARA_API_KEY=ara_live_xxx npx ararahq-mcp --stdio
+```
+
+---
+
+## 5 things you can do right now
+
+**1. Ask Claude:** *"Quantas mensagens entregamos essa semana e quanto gastei?"*
+→ Claude reads `arara://wallet/balance` + calls `get_delivery_metrics`. Two-line answer.
+
+**2. Ask Claude:** *"Manda uma promoção pra 200 leads do último mês com 10% off."*
+→ Triggers the `plan_campaign` prompt. Estimates cost, asks for approval, dispatches with idempotency key.
+
+**3. Ask Claude:** *"O cliente +5511999998888 reclamou. Como respondo?"*
+→ Runs `respond_to_complaint`. Reads conversation history, asks Brain for a suggestion in your tone, shows it, sends on approval.
+
+**4. Ask Claude:** *"Tem dinheiro saindo da minha conta? Recupera o que dá."*
+→ Runs `recover_revenue`. Scans AbacatePay leaks, enriches with WhatsApp history, proposes offers per leak.
+
+**5. Ask Claude:** *"Cria um Smart Link pra meu bio do Instagram que mande mensagem pra +5511999998888 com texto pré-pronto."*
+→ Calls `create_smart_link`. Returns a short URL with click tracking + QR code.
+
+---
+
+## Why an MCP, not an API client?
+
+A regular API client needs you to remember endpoints, payload shapes, validation rules. The MCP gives the LLM:
+
+- **Tools** with self-describing schemas — LLM picks the right one
+- **Resources** the LLM reads passively — no extra call for "what's my balance"
+- **Prompts** that orchestrate multi-step flows — `plan_campaign`, `recover_revenue`, `weekly_review` work in one command
+- **OAuth handshake** — no key copy-paste
+
+You speak Portuguese. Claude does the rest.
+
+---
+
+## Tool index
+
+<details>
+<summary><b>Auth</b> — login, logout, whoami</summary>
+
+| Tool | What it does |
+|---|---|
+| `login` | OAuth device flow. Opens browser, polls until approved, stores token in OS keychain. |
+| `logout` | Wipes token from keychain. |
+| `whoami` | Shows authenticated user + active organization + plan. |
+
+</details>
+
+<details>
+<summary><b>Messaging</b> — send_message, send_template_to_many, get_message_status, list_messages</summary>
+
+`send_message` accepts EITHER `text` (free text, requires open 24h window) OR `templateName` + `templateVariables` (always allowed). Guardian content checks run before dispatch. `send_template_to_many` handles up to 1000 recipients with per-recipient variables.
+
+</details>
+
+<details>
+<summary><b>Templates</b> — list, create, get_status, get_analytics, delete</summary>
+
+`create_template` supports body + header (text/media/document) + footer + samples. Meta approval typically takes 1–5 minutes; poll with `get_template_status`.
+
+</details>
+
+<details>
+<summary><b>Campaigns</b> — create, list, get, estimate_cost, cancel</summary>
+
+`create_campaign` accepts optional `idempotencyKey` to safely retry on network errors. `estimate_campaign_cost` previews spend before commit.
+
+</details>
+
+<details>
+<summary><b>Contacts</b> — list, upsert (batch up to 1000), get, stats</summary>
+
+`upsert_contacts` returns per-row errors so the LLM can summarize bad rows. Custom attributes accepted as free-form JSON.
+
+</details>
+
+<details>
+<summary><b>Conversations</b> — list, get_messages, reply, lead_stats</summary>
+
+`reply_in_conversation` only works within an open 24h session window. Use `send_message` with a template to reopen.
+
+</details>
+
+<details>
+<summary><b>Brain</b> — interact, suggest_reply, knowledge CRUD, ingest_url, get_config</summary>
+
+`brain_interact` answers about your business using your templates + knowledge + history. `brain_suggest_reply` drafts on-brand replies. `ingest_url_to_brain` crawls a URL into the knowledge base.
+
+</details>
+
+<details>
+<summary><b>Smart Links</b> — create, list, update, stats <i>(Arara DNA)</i></summary>
+
+Trackable wa.me alternative with per-link QR code and click counting. Use in bios, ads, footers.
+
+</details>
+
+<details>
+<summary><b>Recovery</b> — endpoint, events, ingests, retry <i>(paid feature)</i></summary>
+
+Manage the cart-abandonment / order-event funnel: configure events, fire test ingests with your own phone, list & retry failures.
+
+</details>
+
+<details>
+<summary><b>Numbers</b> — list, update, request, sync, list_requests</summary>
+
+Manage WhatsApp numbers, request new ones, force sync of profile (display name / vertical) with Meta.
+
+</details>
+
+<details>
+<summary><b>Account</b> — wallet_balance, org_info, delivery_metrics, brain_metrics, transactions</summary>
+
+Quick reads of the org state. Often combined into the `weekly_review` prompt.
+
+</details>
+
+<details>
+<summary><b>API Keys</b> — list, create, rotate, revoke</summary>
+
+`rotate_api_key` revokes the old and issues new in one call — for handling compromise without downtime.
+
+</details>
+
+<details>
+<summary><b>Phone Lookup</b> — single, batch (R$ 0,05 each)</summary>
+
+Validate phones before sending. Returns mobile/landline, carrier, hasWhatsapp.
+
+</details>
+
+<details>
+<summary><b>Guardian</b> — configure_policy</summary>
+
+Custom regex rules per session that block sensitive content + brand-policy violations on outbound. Built-in rules (CPF, CNPJ, CVV, passwords, tokens) are always on.
+
+</details>
+
+<details>
+<summary><b>AbacatePay</b> — find_revenue_leaks, negotiate_payment, check_payment_status</summary>
+
+Atomic recovery cycles: scan leaks → propose offer → dispatch payment link via WhatsApp → verify payment. Conversation as contract.
+
+</details>
+
+---
+
+## Resources (LLM reads, no tool call)
+
+- `arara://organization/me` — org name, plan, consumption
+- `arara://wallet/balance` — live BRL balance
+- `arara://templates/approved` — only APPROVED templates, ready to use
+- `arara://numbers` — active WhatsApp numbers
+- `arara://campaigns/recent` — last 10
+- `arara://recovery/funnel` — recovery endpoint health + recent ingest mix
+
+---
+
+## Prompts (slash workflows)
+
+| Prompt | When to use |
+|---|---|
+| `plan_campaign` | "I want to send X to Y people" — handles audience → template → estimate → confirm → dispatch |
+| `respond_to_complaint` | A specific conversation in COMPLAINT state — reads history, drafts reply via Brain, sends on approval |
+| `recover_revenue` | Pull AbacatePay leaks, propose per-leak offers, dispatch payment links with operator approval |
+| `onboard_customer` | New customer → validate phone → register → welcome message |
+| `weekly_review` | Compile balance + metrics + campaigns + recovery into a paste-ready summary |
+
+---
+
+## Configuration
+
+```sh
+# OAuth is the default; these are all optional overrides.
+ARARA_API_KEY=ara_live_xxx          # Fallback / headless mode
+ARARA_BASE_URL=https://...          # Override (default: https://api.ararahq.com/api)
+ABACATE_API_KEY=xxx                 # For AbacatePay tools
+ARARA_MCP_TELEMETRY=off             # Disable usage telemetry
+PORT=3333                           # SSE mode port (default)
+MCP_TRANSPORT=sse                   # Force SSE instead of stdio
+```
+
+Tokens are stored via [keytar](https://github.com/atom/node-keytar) — macOS Keychain, Linux Secret Service, Windows Credential Manager. Never on disk.
+
+---
+
+## Local dev
+
+```sh
+npm install
 npm run build
-node build/index.js --transport sse
+node build/index.js --stdio          # for Claude Desktop testing
+PORT=3333 node build/index.js        # for SSE testing on localhost
 ```
 
-Server runs on `http://localhost:3333` by default.
+---
 
-## Usage Examples
+## Get help
 
-- *"Check who didn't pay their Pix yesterday on AbacatePay and send a reminder via WhatsApp."*
-- *"Generate a payment link for R$50 for customer X with a 10% discount and send it."*
-- *"Run a campaign with the welcome template to all contacts imported today."*
-- *"Show me my account overview — wallet balance and delivery rate."*
-- *"What is the sentiment history of customer Y before I respond?"*
+- Docs: [docs.ararahq.com](https://docs.ararahq.com)
+- Issues: [github.com/ararahq/ararahq-mcp/issues](https://github.com/ararahq/ararahq-mcp/issues)
+- WhatsApp: just message any Arara number — yes, we use our own product
 
-## Contributing
+---
 
-See [CONTRIBUTING.md](https://github.com/ararahq/.github/blob/main/CONTRIBUTING.md) for guidelines.
-
-## License
-
-MIT - [AraraHQ](https://ararahq.com)
+Built in São Paulo · MIT license · © AraraHQ
