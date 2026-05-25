@@ -99,30 +99,28 @@ export const registerConversationTools = (server: McpServer) => {
     },
     async ({ apiKey, phone }) => {
       try {
-        const response = await apiGet("/v1/conversations", {
+        const response = await apiPost("/v1/conversations/window-status", { phones: [phone] }, {
           tokenOverride: apiKey,
-          params: { size: 100 },
           toolName: "check_window_status",
         });
-        const items: any[] = response.data?.content ?? response.data?.data ?? response.data ?? [];
-        const conv = items.find((c: any) => c.customerPhone === phone || c.phone === phone);
-        if (!conv) {
+        const results: any[] = response.data?.results ?? [];
+        const result = results[0];
+        if (!result) {
           return successResponse([
-            `No conversation found for ${phone} in the most recent 100 conversations.`,
-            `If the customer never messaged you OR messaged more than 100 conversations ago, you must send a template to start the window.`,
+            `No conversation found for ${phone}.`,
+            `If the customer never messaged you, you must send an approved template to start the window.`,
           ].join("\n"));
         }
-        const expiresAt = conv.windowExpiresAt ? new Date(conv.windowExpiresAt) : null;
-        const isOpen = !!(expiresAt && expiresAt.getTime() > Date.now());
-        const hoursRemaining = isOpen && expiresAt
-          ? ((expiresAt.getTime() - Date.now()) / 3_600_000).toFixed(1)
+        const isOpen = !!result.isWindowOpen;
+        const hoursRemaining = result.hoursRemaining != null
+          ? Number(result.hoursRemaining).toFixed(1)
           : "0";
         return successResponse([
           `Window status for ${phone}:`,
           `  Open:           ${isOpen ? "YES" : "NO"}`,
-          `  Expires at:     ${conv.windowExpiresAt ?? "n/a"}`,
+          `  Expires at:     ${result.windowExpiresAt ?? "n/a"}`,
           `  Hours left:     ${hoursRemaining}`,
-          `  ConversationId: ${conv.id}`,
+          `  ConversationId: ${result.conversationId ?? "n/a"}`,
           isOpen
             ? `You can send free text via reply_in_conversation or send_message (text or interactive).`
             : `Window closed. Send an approved template via send_message templateName=... to reopen.`,
