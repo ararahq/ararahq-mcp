@@ -1,19 +1,52 @@
 {
   "name": "ararahq-mcp",
-  "version": "2.0.0",
-  "description": "Universal Arara Revenue Operating System MCP",
+  "version": "3.0.0",
+  "description": "MCP server for AraraHQ — turn Claude / Cursor / ChatGPT into a WhatsApp operator with 64 tools, OAuth login, Smart Links, Recovery and AbacatePay integration.",
   "main": "build/index.js",
   "bin": {
     "ararahq-mcp": "build/index.js"
   },
   "files": [
-    "build"
+    "build",
+    "README.md",
+    "LICENSE"
   ],
   "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepare": "tsc"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "whatsapp",
+    "claude",
+    "cursor",
+    "chatgpt",
+    "ararahq",
+    "abacatepay",
+    "cpaas",
+    "twilio-alternative",
+    "ai-agent",
+    "brazil"
+  ],
+  "homepage": "https://ararahq.com/mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ararahq/ararahq-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ararahq/ararahq-mcp/issues"
+  },
+  "author": "AraraHQ <devs@ararahq.com>",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.1",
@@ -22,6 +55,7 @@
     "dotenv": "^17.3.1",
     "express": "^4.18.2",
     "fs-extra": "^11.3.4",
+    "keytar": "^7.9.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {

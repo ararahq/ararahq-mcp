@@ -1,0 +1,48 @@
+name: ararahq-mcp
+displayName: Arara MCP
+description: Turn Claude / Cursor / ChatGPT into a WhatsApp operator that knows your customers, templates, wallet and funnel. 64 tools, 6 resources, 5 guided workflows, OAuth login. Built by AraraHQ — Brazilian CPaaS for WhatsApp, homologated by Meta.
+homepage: https://ararahq.com/mcp
+repository: https://github.com/ararahq/ararahq-mcp
+license: MIT
+author: AraraHQ
+keywords:
+  - whatsapp
+  - cpaas
+  - ararahq
+  - abacatepay
+  - brazil
+  - cli
+  - agent
+
+transports:
+  - stdio
+  - sse
+
+runtime:
+  command: npx
+  args:
+    - "-y"
+    - "ararahq-mcp"
+
+config:
+  type: object
+  properties:
+    ARARA_API_KEY:
+      type: string
+      title: Arara API Key (optional)
+      description: Use as fallback if you do not want the OAuth flow. Format ara_live_* or ara_test_*. Leave blank to authenticate via the login tool.
+    ABACATE_API_KEY:
+      type: string
+      title: AbacatePay API Key (optional)
+      description: Required only if you want to use the AbacatePay tools (find_revenue_leaks, negotiate_payment, check_payment_status).
+    ARARA_BASE_URL:
+      type: string
+      title: Arara API Base URL
+      default: https://api.ararahq.com/api
+      description: Override only for staging or self-hosted deployments.
+    ARARA_MCP_TELEMETRY:
+      type: string
+      enum: ["on", "off"]
+      default: "on"
+      description: Disable anonymous usage telemetry by setting to "off".
+  required: []
