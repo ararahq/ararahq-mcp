@@ -5,9 +5,10 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies (--ignore-scripts pra nao rodar prepare/tsc antes do src
+# ser copiado; build TS roda explicitamente na linha abaixo).
 COPY package*.json ./
-RUN npm install
+RUN npm install --ignore-scripts
 
 # Copy source and config
 COPY tsconfig.json ./
@@ -28,8 +29,8 @@ ENV NODE_ENV=production
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/build ./build
 
-# Install production dependencies only
-RUN npm install --omit=dev
+# Install production dependencies only (--ignore-scripts: build ja foi feito no builder stage)
+RUN npm install --omit=dev --ignore-scripts
 
 # Standard MCP port (dedicated for Arara MCP)
 EXPOSE 3333
