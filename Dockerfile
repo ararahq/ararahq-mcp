@@ -5,10 +5,10 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Install dependencies (--ignore-scripts pra nao rodar prepare/tsc antes do src
-# ser copiado; build TS roda explicitamente na linha abaixo).
+# Install dependencies. Sem `prepare: tsc` no package.json (removido); postinstall
+# de pacotes nativos como keytar precisa rodar normalmente.
 COPY package*.json ./
-RUN npm install --ignore-scripts
+RUN npm install
 
 # Copy source and config
 COPY tsconfig.json ./
@@ -29,8 +29,8 @@ ENV NODE_ENV=production
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/build ./build
 
-# Install production dependencies only (--ignore-scripts: build ja foi feito no builder stage)
-RUN npm install --omit=dev --ignore-scripts
+# Install production dependencies only (keytar precisa postinstall pro binding nativo)
+RUN npm install --omit=dev
 
 # Standard MCP port (dedicated for Arara MCP)
 EXPOSE 3333
