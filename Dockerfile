@@ -5,6 +5,12 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
+# libsecret-1-dev: keytar precisa pra compilar/rodar (linux keychain).
+# node-gyp + python: pro postinstall do keytar conseguir compilar binding nativo.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libsecret-1-dev python3 build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install dependencies. Sem `prepare: tsc` no package.json (removido); postinstall
 # de pacotes nativos como keytar precisa rodar normalmente.
 COPY package*.json ./
@@ -24,6 +30,11 @@ WORKDIR /app
 
 # Set production environment
 ENV NODE_ENV=production
+
+# libsecret-1-0 runtime (sem -dev): keytar carrega libsecret.so em runtime.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libsecret-1-0 && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy only necessary files from builder
 COPY --from=builder /app/package*.json ./
