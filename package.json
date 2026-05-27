@@ -1,7 +1,7 @@
 {
   "name": "ararahq-mcp",
   "version": "3.0.0",
-  "description": "MCP server for AraraHQ — turn Claude / Cursor / ChatGPT into a WhatsApp operator with 64 tools, OAuth login, Smart Links, Recovery and AbacatePay integration.",
+  "description": "MCP server for AraraHQ — turn Claude Code, Claude Desktop, Cursor, Windsurf or ChatGPT into a WhatsApp operator with 84 tools, OAuth login, Smart Links, Recovery and AbacatePay integration.",
   "main": "build/index.js",
   "bin": {
     "ararahq-mcp": "build/index.js"
@@ -25,7 +25,9 @@
     "model-context-protocol",
     "whatsapp",
     "claude",
+    "claude-code",
     "cursor",
+    "windsurf",
     "chatgpt",
     "ararahq",
     "abacatepay",
@@ -34,10 +36,10 @@
     "ai-agent",
     "brazil"
   ],
-  "homepage": "https://ararahq.com/mcp",
+  "homepage": "https://docs.ararahq.com/mcp-server",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ararahq/ararahq-mcp.git"
+    "url": "git+https://github.com/ararahq/ararahq-mcp.git"
   },
   "bugs": {
     "url": "https://github.com/ararahq/ararahq-mcp/issues"
