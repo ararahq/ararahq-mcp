@@ -117,7 +117,7 @@ const windowClosedGuidance = async (recipient: Recipient, apiKey?: string): Prom
 const registerSendWhatsapp = (server: McpServer) => {
   server.tool(
     "send_whatsapp",
-    "Manda uma mensagem de WhatsApp pra UMA pessoa. Burro first: você só passa pra quem (número OU nome de contato salvo) e o quê (texto em linguagem natural). A Arara resolve número, formato E.164 e nono dígito. Se a janela de 24h estiver fechada, ela não inventa template — devolve os aprovados pra escolher ou ajuda a aprovar um. Para vários destinatários, use broadcast.",
+    "Manda uma mensagem de WhatsApp pra UMA pessoa. Você só passa pra quem (número OU nome de contato salvo) e o quê (texto em linguagem natural). A Arara resolve número, formato E.164 e nono dígito. Se a janela de 24h estiver fechada, ela não inventa template — devolve os aprovados pra escolher ou ajuda a aprovar um. Para vários destinatários, use broadcast.",
     {
       to: z.string().describe("Número (qualquer formato) ou nome de um contato salvo. Ex: '+5511999999999', '11999999999' ou 'João'."),
       message: z.string().min(1).describe("O que escrever, em linguagem natural. Sem template, sem variável."),

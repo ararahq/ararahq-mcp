@@ -1,7 +1,7 @@
 {
   "name": "ararahq-mcp",
   "version": "4.0.0",
-  "description": "MCP server for AraraHQ — turn Claude Code, Claude Desktop, Cursor, Windsurf or ChatGPT into a WhatsApp operator. Burro-first: send_whatsapp, broadcast and check_status do the heavy lifting (number, E.164, 24h window, template) for you.",
+  "description": "MCP server for AraraHQ — turn Claude Code, Claude Desktop, Cursor, Windsurf or ChatGPT into a WhatsApp operator. Say who and what: send_whatsapp, broadcast and check_status do the heavy lifting (number, E.164, 24h window, template) for you.",
   "main": "build/index.js",
   "bin": {
     "ararahq-mcp": "build/index.js"

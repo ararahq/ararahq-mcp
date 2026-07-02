@@ -7,7 +7,7 @@
 
 Turn Claude Code, Claude Desktop, Cursor, Windsurf or ChatGPT into a WhatsApp operator that knows your customers, your templates, your wallet, and your funnel. Built by [AraraHQ](https://ararahq.com) — Brazilian CPaaS for WhatsApp, homologated by Meta.
 
-**Burro-first: say who and what, send_whatsapp does the rest · OAuth login · stdio + SSE**
+**Say who and what — send_whatsapp does the rest · OAuth login · stdio + SSE**
 
 ---
 
@@ -111,13 +111,13 @@ ARARA_API_KEY=ara_live_xxx npx ararahq-mcp --stdio
 
 ## Why an MCP, not a raw API client?
 
-A raw API client makes you remember endpoints, payload shapes, the E.164 format, the 24h window, template approval state. The MCP collapses that into a burro-first surface: you say **who** and **what**, and `send_whatsapp` figures out the rest. You speak Portuguese. The LLM does the rest.
+A raw API client makes you remember endpoints, payload shapes, the E.164 format, the 24h window, template approval state. The MCP collapses that into a minimal surface: you say **who** and **what**, and `send_whatsapp` figures out the rest. You speak Portuguese. The LLM does the rest.
 
 ---
 
 ## Tool index
 
-Burro-first: a small set of intent tools do the work, and read-only data lives in resources (your client loads them automatically, no tool call needed). You say **who** and **what** — the tools handle number format, the 24h window, and template state.
+A small set of intent tools does the work, and read-only data lives in resources (your client loads them automatically, no tool call needed). You say **who** and **what** — the tools handle number format, the 24h window, and template state.
 
 <details>
 <summary><b>Send</b> — 3 tools <i>(the spine)</i></summary>

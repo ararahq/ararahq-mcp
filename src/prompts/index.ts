@@ -6,7 +6,7 @@ export const registerAllPrompts = (server: McpServer): void => {
     "send_first_message",
     {
       title: "Send a WhatsApp message",
-      description: "Burro-first send: resolve who, send the text, and handle the 24h window gracefully if it is closed.",
+      description: "Resolve who, send the text, and handle the 24h window gracefully if it is closed.",
       argsSchema: {
         to: z.string().describe("Quem receber: número (qualquer formato) ou nome de contato salvo"),
         message: z.string().describe("O que escrever, em linguagem natural"),
