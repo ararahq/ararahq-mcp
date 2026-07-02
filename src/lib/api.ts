@@ -1,9 +1,9 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
 import { sendTelemetry } from "./telemetry.js";
 import { getAraraToken, forceRefreshToken } from "./auth.js";
-import { ARARA_BASE, ABACATE_BASE, SERVER_VERSION } from "./constants.js";
+import { ARARA_BASE, SERVER_VERSION } from "./constants.js";
 
-export { ARARA_BASE, ABACATE_BASE, SERVER_VERSION };
+export { ARARA_BASE, SERVER_VERSION };
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const UPLOAD_TIMEOUT_MS = 30_000;
@@ -177,16 +177,3 @@ export const extractError = (error: unknown): string => {
   }
   return String(error);
 };
-
-export const abacateGet = <T = any>(path: string, apiKey: string, params?: Record<string, unknown>) =>
-  axios.get<T>(`${ABACATE_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    params,
-    timeout: DEFAULT_TIMEOUT_MS,
-  });
-
-export const abacatePost = <T = any>(path: string, body: unknown, apiKey: string) =>
-  axios.post<T>(`${ABACATE_BASE}${path}`, body, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    timeout: DEFAULT_TIMEOUT_MS,
-  });

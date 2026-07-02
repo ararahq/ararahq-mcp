@@ -69,7 +69,7 @@ export const registerAllResources = (server: McpServer): void => {
     "arara://templates/approved",
     {
       title: "Approved templates",
-      description: "All templates ready to use (status APPROVED). Use this to pick a templateName for send_message or create_campaign without listing manually.",
+      description: "All templates ready to use (status APPROVED). Read this to pick a template for broadcast, or to answer send_whatsapp when the 24h window is closed.",
       mimeType: "application/json",
     },
     async (uri) => {
@@ -103,7 +103,7 @@ export const registerAllResources = (server: McpServer): void => {
     "arara://numbers",
     {
       title: "WhatsApp numbers",
-      description: "Numbers assigned to this org with status and default flag. Useful to pick a `sender` for send_message.",
+      description: "Numbers assigned to this org with status and default flag. Useful to pick a `from` number for send_whatsapp or broadcast.",
       mimeType: "application/json",
     },
     async (uri) => {
@@ -246,6 +246,87 @@ export const registerAllResources = (server: McpServer): void => {
                 byStatus: grouped,
               },
             }),
+          }],
+        };
+      } catch (error) {
+        return errorContent(uri, error);
+      }
+    },
+  );
+
+  server.registerResource(
+    "contacts_recent",
+    "arara://contacts/recent",
+    {
+      title: "Recent contacts",
+      description: "Latest saved contacts (name + phone). Read this to resolve who to message or to confirm a contact exists before calling send_whatsapp by name.",
+      mimeType: "application/json",
+    },
+    async (uri) => {
+      try {
+        const response = await apiGet("/v1/contacts", {
+          params: { page: 0, size: 50 },
+          toolName: "resource:contacts",
+        });
+        const contacts: any[] = response.data?.contacts ?? [];
+        return {
+          contents: [{
+            uri: uri.toString(),
+            mimeType: "application/json",
+            text: safeJson(contacts.map((c: any) => ({ id: c.id, name: c.name, phone: c.phone, email: c.email }))),
+          }],
+        };
+      } catch (error) {
+        return errorContent(uri, error);
+      }
+    },
+  );
+
+  server.registerResource(
+    "conversations_recent",
+    "arara://conversations/recent",
+    {
+      title: "Recent conversations",
+      description: "Latest WhatsApp conversations with status and last interaction. Read this to triage the inbox or see who is inside the 24h window.",
+      mimeType: "application/json",
+    },
+    async (uri) => {
+      try {
+        const response = await apiGet("/v1/conversations", {
+          params: { page: 0, size: 30 },
+          toolName: "resource:conversations",
+        });
+        const items: any[] = response.data?.data ?? response.data ?? [];
+        return {
+          contents: [{
+            uri: uri.toString(),
+            mimeType: "application/json",
+            text: safeJson(items),
+          }],
+        };
+      } catch (error) {
+        return errorContent(uri, error);
+      }
+    },
+  );
+
+  server.registerResource(
+    "opt_outs",
+    "arara://opt-outs",
+    {
+      title: "Opted-out contacts",
+      description: "Every phone currently opted out from this org. Read before a broadcast to confirm you are not about to message someone who unsubscribed.",
+      mimeType: "application/json",
+    },
+    async (uri) => {
+      try {
+        const response = await apiGet("/v1/opt-outs", { toolName: "resource:opt_outs" });
+        const items: any[] = response.data?.items ?? [];
+        return {
+          contents: [{
+            uri: uri.toString(),
+            mimeType: "application/json",
+            text: safeJson({ total: response.data?.total ?? items.length, items }),
           }],
         };
       } catch (error) {

@@ -6,7 +6,6 @@ import { ARARA_BASE, OAUTH_CLIENT_ID } from "./constants.js";
 export const sessionContext = new AsyncLocalStorage<{ sessionId: string }>();
 
 export const sessionKeysArara = new Map<string, string>();
-export const sessionKeysAbacate = new Map<string, string>();
 export const sessionGuardianRules = new Map<string, string[]>();
 
 let cachedToken: StoredToken | null | undefined = undefined;
@@ -86,12 +85,4 @@ export const getAraraToken = async (overrideToken?: string): Promise<string | un
   const oauth = await getOAuthToken();
   if (oauth) return oauth;
   return process.env.ARARA_API_KEY;
-};
-
-export const getAbacateKey = (apiKey?: string): string | undefined => {
-  const context = sessionContext.getStore();
-  const sessionKey = context
-    ? sessionKeysAbacate.get(context.sessionId) || sessionKeysArara.get(context.sessionId)
-    : undefined;
-  return apiKey || sessionKey || process.env.ABACATE_API_KEY;
 };

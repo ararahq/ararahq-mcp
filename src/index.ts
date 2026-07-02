@@ -12,7 +12,6 @@ import { registerAllPrompts } from "./prompts/index.js";
 import {
   sessionContext,
   sessionKeysArara,
-  sessionKeysAbacate,
   sessionGuardianRules,
 } from "./lib/auth.js";
 import { SERVER_VERSION } from "./lib/constants.js";
@@ -55,21 +54,11 @@ const getLandingPage = (activeSessions: number) => `<!DOCTYPE html>
     <div class="logo">Arara MCP</div>
     <div class="status"><span class="dot"></span> v${SERVER_VERSION} — Online</div>
     <div class="groups">
+      <div class="group"><div class="group-title">Send</div><div class="group-tools">send_whatsapp · broadcast · check_status</div></div>
+      <div class="group"><div class="group-title">Templates</div><div class="group-tools">create_template · get_template_status</div></div>
+      <div class="group"><div class="group-title">Contacts</div><div class="group-tools">save_contacts · opt_out</div></div>
       <div class="group"><div class="group-title">Auth</div><div class="group-tools">login · logout · whoami</div></div>
-      <div class="group"><div class="group-title">Messaging</div><div class="group-tools">send_message · send_template_to_many · get_message_status · list_messages</div></div>
-      <div class="group"><div class="group-title">Templates</div><div class="group-tools">list · create · get_status · get_analytics · delete</div></div>
-      <div class="group"><div class="group-title">Campaigns</div><div class="group-tools">create · list · get · estimate_cost · cancel</div></div>
-      <div class="group"><div class="group-title">Contacts</div><div class="group-tools">list · upsert · get · stats</div></div>
-      <div class="group"><div class="group-title">Conversations</div><div class="group-tools">list · get_messages · reply · lead_stats</div></div>
-      <div class="group"><div class="group-title">Brain</div><div class="group-tools">interact · suggest_reply · knowledge CRUD · ingest_url · config</div></div>
-      <div class="group"><div class="group-title">Smart Links</div><div class="group-tools">create · list · update · stats</div></div>
-      <div class="group"><div class="group-title">Recovery</div><div class="group-tools">endpoint · events · ingests · test · retry</div></div>
-      <div class="group"><div class="group-title">Numbers</div><div class="group-tools">list · update · request · sync</div></div>
-      <div class="group"><div class="group-title">Account</div><div class="group-tools">balance · metrics · transactions · org_info</div></div>
-      <div class="group"><div class="group-title">API Keys</div><div class="group-tools">list · create · rotate · revoke</div></div>
-      <div class="group"><div class="group-title">Phone Lookup</div><div class="group-tools">single · batch</div></div>
-      <div class="group"><div class="group-title">Guardian</div><div class="group-tools">configure_policy</div></div>
-      <div class="group"><div class="group-title">AbacatePay</div><div class="group-tools">find_revenue_leaks · negotiate_payment · check_status</div></div>
+      <div class="group"><div class="group-title">Resources</div><div class="group-tools">organization · wallet · templates · numbers · campaigns · recovery · contacts · conversations · opt-outs</div></div>
     </div>
     <p style="font-size:0.75rem; opacity:0.4;">Active sessions: ${activeSessions} · © 2026 AraraHQ</p>
   </div>
@@ -97,12 +86,10 @@ async function run() {
     const transports = new Map<string, SSEServerTransport>();
 
     const getDeterministicSessionId = (req: express.Request): string | null => {
-      const araraToken =
+      const token =
         (req.headers["x-arara-key"] as string) ||
         req.headers.authorization ||
         (req.query.Authorization as string);
-      const abacateToken = req.headers["x-abacate-key"] as string;
-      const token = araraToken || abacateToken;
       if (!token) return null;
       return "v-" + crypto
         .createHash("md5")
@@ -144,9 +131,7 @@ async function run() {
         transports.set(sessionId, transport);
 
         const araraToken = (req.headers["x-arara-key"] as string) || req.headers.authorization || (req.query.Authorization as string);
-        const abacateToken = req.headers["x-abacate-key"] as string;
         if (araraToken) sessionKeysArara.set(sessionId, araraToken.toString().replace(/^Bearer\s+/i, "").trim());
-        if (abacateToken) sessionKeysAbacate.set(sessionId, abacateToken.toString().replace(/^Bearer\s+/i, "").trim());
 
         const sessionServer = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
         registerAll(sessionServer);
@@ -164,7 +149,6 @@ async function run() {
           clearInterval(heartbeat);
           transports.delete(sessionId);
           sessionKeysArara.delete(sessionId);
-          sessionKeysAbacate.delete(sessionId);
           sessionGuardianRules.delete(sessionId);
           sessionServer.close().catch(() => {});
         });

@@ -1,7 +1,6 @@
-version: '3.8'
-
 services:
   ararahq-mcp:
+    image: ghcr.io/ararahq/ararahq-mcp:latest
     build: .
     container_name: ararahq-mcp
     ports:
@@ -10,5 +9,4 @@ services:
       - PORT=3333
       - MCP_TRANSPORT=sse
       - ARARA_API_KEY=${ARARA_API_KEY}
-      - ABACATE_API_KEY=${ABACATE_API_KEY}
     restart: unless-stopped
