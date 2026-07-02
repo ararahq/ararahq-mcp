@@ -165,6 +165,15 @@ OAuth device flow: opens browser, polls until approved, stores token in OS keych
 </details>
 
 <details>
+<summary><b>Prompts</b> — 2 ready-made flows</summary>
+
+`send_first_message(to, message)` · `run_broadcast(audience, goal)`
+
+Client-side shortcuts: the first walks the send + closed-window flow; the second picks a template from your approved list, excludes opt-outs, checks balance and asks for your approval before dispatching.
+
+</details>
+
+<details>
 <summary><b>Resources</b> — read-only context</summary>
 
 `arara://organization/me` · `arara://wallet/balance` · `arara://templates/approved` · `arara://numbers` · `arara://numbers/health` · `arara://campaigns/recent` · `arara://recovery/funnel` · `arara://contacts/recent` · `arara://conversations/recent` · `arara://opt-outs`
@@ -173,7 +182,7 @@ Numbers, wallet, templates, contacts, conversations, opt-outs and health snapsho
 
 </details>
 
-> Account config that isn't day-to-day operator work — API keys, business profile, number provisioning, A/B tests, Brain knowledge base, recovery setup, Guardian policy — lives in the [dashboard](https://new.ararahq.com/dashboard), not the agent surface.
+> Account config that isn't day-to-day operator work — API keys, business profile, number provisioning, A/B tests, Brain knowledge base, recovery setup — lives in the [dashboard](https://ararahq.com/dashboard), not the agent surface.
 
 ---
 
