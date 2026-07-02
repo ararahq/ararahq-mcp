@@ -6,7 +6,7 @@ on:
 
 concurrency:
   group: deploy-mcp
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -52,5 +52,6 @@ jobs:
 
             # .env com ARARA_API_KEY ja existe no host e nao e versionado — nao sobrescrever.
             docker compose pull ararahq-mcp
+            docker compose rm -f -s ararahq-mcp || true
             docker compose up -d --remove-orphans
             docker image prune -f
