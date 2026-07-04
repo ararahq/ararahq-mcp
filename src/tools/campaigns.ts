@@ -68,9 +68,13 @@ export const registerCampaignTools = (server: McpServer) => {
           `  Entregues:  ${c.deliveredCount ?? 0}${pct(c.deliveredCount ?? 0)}`,
           `  Lidas:      ${c.readCount ?? 0}${pct(c.readCount ?? 0)}`,
           `  Cliques:    ${c.clickedCount ?? 0}${pct(c.clickedCount ?? 0)}`,
+          `  Respostas:  ${c.replyCount ?? 0}${pct(c.replyCount ?? 0)}`,
           `  Conversões: ${c.convertedCount ?? 0} — R$ ${Number(c.convertedValue ?? 0).toFixed(2)}`,
           `  Custo:      R$ ${Number(c.totalCost ?? 0).toFixed(2)}`,
         ];
+        if ((c.holdoutCount ?? 0) > 0) lines.push(`  Holdout:    ${c.holdoutCount} (aguardando a vencedora do A/B)`);
+        if ((c.blockedCount ?? 0) > 0) lines.push(`  Bloqueados: ${c.blockedCount} (opt-out / bloqueio)`);
+        if ((c.refundCount ?? 0) > 0) lines.push(`  Estornado:  R$ ${Number(c.refundValue ?? 0).toFixed(2)} (${c.refundCount})`);
         return successResponse(lines.join("\n"));
       } catch (error) {
         return errorResponse(`Não peguei o relatório: ${extractError(error)}`);
