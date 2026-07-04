@@ -4,6 +4,8 @@ import { registerSendTool } from "./send.js";
 import { registerTemplateTools } from "./templates.js";
 import { registerContactTools } from "./contacts.js";
 import { registerOptOutTools } from "./opt_outs.js";
+import { registerCampaignTools } from "./campaigns.js";
+import { registerSmartLinkTools } from "./smart_links.js";
 
 export const registerAllTools = (server: McpServer): void => {
   registerAuthTools(server);
@@ -11,4 +13,6 @@ export const registerAllTools = (server: McpServer): void => {
   registerTemplateTools(server);
   registerContactTools(server);
   registerOptOutTools(server);
+  registerCampaignTools(server);
+  registerSmartLinkTools(server);
 };

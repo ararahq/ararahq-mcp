@@ -17,8 +17,25 @@ export const registerTemplateTools = (server: McpServer) => {
       headerType: z.enum(["text", "media", "document"]).optional().describe("Default 'text' quando o header é texto"),
       footer: z.string().optional(),
       samples: z.record(z.string()).optional().describe("Exemplos de variável por índice, ex: {\"1\": \"João\"}"),
+      buttons: z
+        .array(
+          z.object({
+            type: z.enum(["QUICK_REPLY", "URL", "PHONE_NUMBER", "SMART_LINK", "COPY_CODE"]),
+            text: z.string().describe("Rótulo do botão"),
+            url: z
+              .string()
+              .optional()
+              .describe(
+                "URL do botão. Para SMART_LINK, é o DESTINO real (ex: https://wa.me/5583999999999?text=Oi) — a Arara encurta e conta cada clique no relatório da campanha.",
+              ),
+            phone: z.string().optional().describe("Número E.164, só para PHONE_NUMBER"),
+          }),
+        )
+        .max(2)
+        .optional()
+        .describe("Até 2 botões. Use SMART_LINK para link rastreável (o clique aparece no get_campaign)."),
     },
-    async ({ apiKey, name, category, body, language, header, headerType, footer, samples }) => {
+    async ({ apiKey, name, category, body, language, header, headerType, footer, samples, buttons }) => {
       try {
         const payload: Record<string, unknown> = { name, category, body, language: language ?? "pt_BR" };
         if (header) {
@@ -27,6 +44,7 @@ export const registerTemplateTools = (server: McpServer) => {
         }
         if (footer) payload.footer = footer;
         if (samples) payload.samples = samples;
+        if (buttons && buttons.length > 0) payload.buttons = buttons;
         const response = await apiPost("/v1/templates", payload, {
           tokenOverride: apiKey,
           toolName: "create_template",
