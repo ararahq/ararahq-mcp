@@ -241,8 +241,89 @@ const registerCheckStatus = (server: McpServer) => {
   );
 };
 
+const registerBroadcastAb = (server: McpServer) => {
+  server.tool(
+    "broadcast_ab",
+    "Dispara uma campanha com TESTE A/B numa chamada só: você escolhe 2 templates aprovados (A e B), a Arara manda pra uma FATIA dos leads, mede a melhor por clique, e dispara o RESTO pela vencedora sozinha (autopilot). Defaults prontos: 20% em teste, 4h de janela, decide por clique. Precisa dos dois templates aprovados (get_template_status).",
+    {
+      templateName: z.string().describe("Template da variante A (o principal)."),
+      variantBTemplateName: z.string().describe("Template da variante B (a copy que compete com a A)."),
+      to: z
+        .array(z.string())
+        .min(1)
+        .max(MAX_BROADCAST)
+        .describe("Lista de números (qualquer formato) ou nomes de contatos salvos."),
+      variables: z.array(z.string()).optional().describe("Variáveis posicionais aplicadas a TODOS, ex: ['promo de junho']."),
+      name: z.string().optional().describe("Nome da campanha no dashboard. Omita pra gerar automático."),
+      samplePct: z.number().min(1).max(99).optional().describe("% dos leads que entra no teste. Default 20."),
+      decisionWindowMinutes: z.number().min(1).optional().describe("Minutos até decidir a vencedora. Default 240 (4h)."),
+      metric: z
+        .enum(["DELIVERED", "READ", "CLICKED", "CONVERTED"])
+        .optional()
+        .describe("O que define a vencedora. Default CLICKED."),
+      autopilot: z.boolean().optional().describe("Disparar o resto pela vencedora sozinho. Default true."),
+      from: z.string().optional().describe("Número de origem em E.164. Omita pra usar o padrão da org."),
+      apiKey: z.string().optional(),
+    },
+    async ({
+      templateName,
+      variantBTemplateName,
+      to,
+      variables,
+      name,
+      samplePct,
+      decisionWindowMinutes,
+      metric,
+      autopilot,
+      from,
+      apiKey,
+    }) => {
+      const resolved = await Promise.all(to.map((entry) => resolveRecipient(entry, apiKey).catch(() => ({ error: entry }))));
+      const valid = resolved.filter((r): r is Recipient => "phone" in r);
+      const failed = resolved.filter((r): r is { error: string } => "error" in r).map((r) => r.error);
+      if (valid.length === 0) {
+        return errorResponse(`Não disparei: nenhum destinatário válido. Não resolvi: ${failed.join(", ")}`);
+      }
+      try {
+        const sample = samplePct ?? 20;
+        const window = decisionWindowMinutes ?? 240;
+        const auto = autopilot ?? true;
+        const payload: Record<string, unknown> = {
+          name: name ?? `A/B ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
+          templateName,
+          contacts: valid.map((r) => ({ to: r.phone, variables: variables ?? [] })),
+          abTest: {
+            variantBTemplateName,
+            metric: metric ?? "CLICKED",
+            samplePct: sample,
+            splitPct: 50,
+            decisionWindowMinutes: window,
+            autopilot: auto,
+          },
+        };
+        if (from) payload.sender = from;
+        const response = await apiPost("/v1/campaigns", payload, { tokenOverride: apiKey, toolName: "broadcast_ab" });
+        const c = response.data ?? {};
+        const lines = [
+          `Teste A/B criado pra ${valid.length} ${valid.length === 1 ? "pessoa" : "pessoas"}.`,
+          `  A: ${templateName}  vs  B: ${variantBTemplateName}  (métrica: ${metric ?? "CLICKED"})`,
+          `  Testa em ${sample}% dos leads por ${window} min` +
+            (auto ? ", depois dispara o resto pela vencedora." : " (autopilot OFF: você decide o resto)."),
+          `  Campanha: ${c.id ?? "N/A"}  ·  Custo total: R$ ${Number(c.totalCost ?? 0).toFixed(2)}`,
+          `  Acompanhe com get_campaign.`,
+        ];
+        if (failed.length > 0) lines.push(`  Não resolvi ${failed.length}: ${failed.slice(0, 10).join(", ")}`);
+        return successResponse(lines.join("\n"));
+      } catch (error) {
+        return errorResponse(`Não disparei o A/B: ${readBackendError(error).message}`);
+      }
+    },
+  );
+};
+
 export const registerSendTool = (server: McpServer) => {
   registerSendWhatsapp(server);
   registerBroadcast(server);
+  registerBroadcastAb(server);
   registerCheckStatus(server);
 };
