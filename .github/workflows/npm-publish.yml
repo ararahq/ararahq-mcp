@@ -1,0 +1,41 @@
+name: Publish to npm
+
+# Publica no npm sempre que a versão do package.json mudar na main.
+# É idempotente: se a versão já está publicada, não faz nada — então
+# push de código sem bump não republica. Bumpou a versão → publica.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish se a versão for nova
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION já está publicado — nada a fazer."
+          else
+            echo "Publicando $NAME@$VERSION..."
+            npm publish --access public
+            echo "Publicado."
+          fi
