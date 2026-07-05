@@ -17,15 +17,16 @@ Turn Claude Code, Claude Desktop, Cursor, Windsurf or ChatGPT into a WhatsApp op
 
 ```sh
 claude mcp add arara --scope user -- npx -y ararahq-mcp
+npx -y ararahq-mcp login
 ```
 
-Restart Claude Code. In any conversation:
+Browser opens, you approve, the token lands in your OS keychain. Done.
+
+Prefer doing it inside a conversation? Restart Claude Code and say:
 
 ```
 log into arara
 ```
-
-Browser opens, you approve, the token lands in your OS keychain. Done.
 
 ### Claude Desktop
 

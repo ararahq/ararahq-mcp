@@ -13,7 +13,10 @@ import {
   sessionContext,
   sessionKeysArara,
   sessionGuardianRules,
+  getAraraToken,
+  dropToken,
 } from "./lib/auth.js";
+import { requestDeviceCode, pollForToken, openBrowser } from "./lib/deviceFlow.js";
 import { SERVER_VERSION } from "./lib/constants.js";
 
 const registerAll = (s: McpServer) => {
@@ -192,7 +195,34 @@ async function run() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error(`Arara MCP v${SERVER_VERSION} (stdio)`);
+    const token = await getAraraToken();
+    if (!token) {
+      console.error(
+        "No Arara auth configured. Run `npx -y ararahq-mcp login` in a terminal, " +
+        "or ask your agent to call the `login` tool.",
+      );
+    }
   }
+}
+
+async function runLoginCli() {
+  const code = await requestDeviceCode();
+  console.log(`\nApprove the login in your browser:\n\n   ${code.verifyUrl}\n\nCode: ${code.userCode}`);
+  if (openBrowser(code.verifyUrl)) console.log("Opening your browser...");
+  console.log("Waiting for approval...");
+  const result = await pollForToken(code);
+  if (!result.ok) {
+    console.error(result.message);
+    process.exit(1);
+  }
+  console.log("Login complete. Token saved to the system keychain.");
+  process.exit(0);
+}
+
+async function runLogoutCli() {
+  await dropToken();
+  console.log("Logged out. OAuth token cleared from the keychain.");
+  process.exit(0);
 }
 
 export function createSandboxServer() { return server; }
@@ -202,6 +232,12 @@ const isScan =
   process.argv.some((arg) => arg.includes("smithery")) ||
   process.env.SMITHERY === "true";
 
+const cliCommand = process.argv[2];
+
 if (process.env.NODE_ENV !== "test" && !isScan) {
-  run().catch((error) => { console.error("Fatal:", error); process.exit(1); });
+  const entry =
+    cliCommand === "login" ? runLoginCli()
+      : cliCommand === "logout" ? runLogoutCli()
+        : run();
+  entry.catch((error) => { console.error("Fatal:", error); process.exit(1); });
 }
