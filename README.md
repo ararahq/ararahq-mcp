@@ -157,6 +157,15 @@ Submit a real, fixed-copy template for Meta approval (used when the 24h window i
 </details>
 
 <details>
+<summary><b>Links</b> — 4 tools</summary>
+
+`create_smart_link` · `list_smart_links` · `create_short_link` · `list_short_links`
+
+`create_smart_link(name, phoneNumber, defaultText?)` makes a click-to-chat link + QR that opens WhatsApp on your number with a prefilled text — the destination is always a **number**. `create_short_link(url, name?)` shortens **any URL** into a tracked `ararahq.com/l/CODE` that 302-redirects to the destination and counts every click — use it for a bio link, an ad, or a `utm`-tagged landing page. Both `list_*` tools return the links with per-link click counts.
+
+</details>
+
+<details>
 <summary><b>Compliance</b> — 1 tool</summary>
 
 `opt_out`
