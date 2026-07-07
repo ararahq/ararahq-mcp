@@ -57,7 +57,8 @@ const getLandingPage = (activeSessions: number) => `<!DOCTYPE html>
     <div class="logo">Arara MCP</div>
     <div class="status"><span class="dot"></span> v${SERVER_VERSION} — Online</div>
     <div class="groups">
-      <div class="group"><div class="group-title">Send</div><div class="group-tools">send_whatsapp · broadcast · check_status</div></div>
+      <div class="group"><div class="group-title">Send</div><div class="group-tools">send_whatsapp · send_template · broadcast · broadcast_ab · check_status</div></div>
+      <div class="group"><div class="group-title">Inbox</div><div class="group-tools">read_conversation</div></div>
       <div class="group"><div class="group-title">Templates</div><div class="group-tools">create_template · get_template_status</div></div>
       <div class="group"><div class="group-title">Contacts</div><div class="group-tools">save_contacts · opt_out</div></div>
       <div class="group"><div class="group-title">Auth</div><div class="group-tools">login · logout · whoami</div></div>

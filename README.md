@@ -121,11 +121,20 @@ A raw API client makes you remember endpoints, payload shapes, the E.164 format,
 A small set of intent tools does the work, and read-only data lives in resources (your client loads them automatically, no tool call needed). You say **who** and **what** — the tools handle number format, the 24h window, and template state.
 
 <details>
-<summary><b>Send</b> — 3 tools <i>(the spine)</i></summary>
+<summary><b>Send</b> — 5 tools <i>(the spine)</i></summary>
 
-`send_whatsapp` · `broadcast` · `check_status`
+`send_whatsapp` · `send_template` · `broadcast` · `broadcast_ab` · `check_status`
 
-`send_whatsapp(to, message)` — `to` is a number in any format OR a saved contact name. Fixes E.164 + the Brazilian 9th digit, sends free text when the 24h window is open, and when it's closed it lists your approved templates or helps you approve a new one — it never invents a template. `broadcast(templateName, to[])` sends an approved template to many. `check_status` answers "delivered? replied? can I message now?".
+`send_whatsapp(to, message)` — `to` is a number in any format OR a saved contact name. Fixes E.164 + the Brazilian 9th digit, sends free text when the 24h window is open, and when it's closed it lists your approved templates or helps you approve a new one — it never invents a template. `send_template(to, templateName, variables[])` sends one approved template to one person, filling `{{1}}`, `{{2}}`... positionally — the way to message someone when the 24h window is closed. `broadcast(templateName, to[], variables[])` sends an approved template to many; pass a plain number/name for the same variables for everyone, or `{to, variables}` per recipient to personalize (each person's name in `{{1}}`). `broadcast_ab` does the same with a 2-template A/B test. `check_status` answers "delivered? replied? can I message now?".
+
+</details>
+
+<details>
+<summary><b>Inbox</b> — 1 tool</summary>
+
+`read_conversation`
+
+`read_conversation(to)` reads the actual message content exchanged with a person — what the customer really wrote, not just the metadata in `arara://conversations/recent`. It reads the raw message timeline by phone, so it does **not** depend on the inbox, the Pro plan, a dedicated number, or the Brain qualifier (whose `leadScore`/`leadSummary` are often null). Each line is tagged with who spoke (customer / you) and when, so you can tell real interest from an AI auto-reply.
 
 </details>
 
@@ -179,7 +188,7 @@ Client-side shortcuts: the first walks the send + closed-window flow; the second
 
 `arara://organization/me` · `arara://wallet/balance` · `arara://templates/approved` · `arara://numbers` · `arara://numbers/health` · `arara://campaigns/recent` · `arara://recovery/funnel` · `arara://contacts/recent` · `arara://conversations/recent` · `arara://opt-outs`
 
-Numbers, wallet, templates, contacts, conversations, opt-outs and health snapshots. The LLM reads these passively to back decisions — they don't clutter tool choice.
+Numbers, wallet, templates, contacts, conversations, opt-outs and health snapshots. The LLM reads these passively to back decisions — they don't clutter tool choice. `conversations/recent` is metadata only; for the actual message content of a conversation, use the `read_conversation` tool.
 
 </details>
 
