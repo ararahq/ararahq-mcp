@@ -1,74 +1,24 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import axios from "axios";
 import { apiGet, apiPost } from "../lib/api.js";
 import { errorResponse, successResponse } from "../lib/types.js";
 import { guardian, getCustomRules } from "../lib/guardian.js";
+import {
+  BackendError,
+  Recipient,
+  readBackendError,
+  recipientLabel,
+  resolveRecipient,
+} from "../lib/recipients.js";
 
 const WINDOW_CLOSED_HINTS = ["janela de 24h", "envie um template", "nenhuma conversa iniciada"];
 const APPROVED_STATUS = "APPROVED";
 const MAX_BROADCAST = 1000;
 
-type BackendError = { status?: number; message: string };
-
-const readBackendError = (error: unknown): BackendError => {
-  if (axios.isAxiosError(error)) {
-    const data = error.response?.data as Record<string, unknown> | undefined;
-    const message = (data?.message as string) || (data?.error as string) || error.message;
-    return { status: error.response?.status, message };
-  }
-  return { message: String(error) };
-};
-
 const isWindowClosed = (err: BackendError): boolean => {
   if (err.status !== 422) return false;
   const lower = err.message.toLowerCase();
   return WINDOW_CLOSED_HINTS.some((hint) => lower.includes(hint));
-};
-
-const looksLikePhone = (value: string): boolean => /^[+\d][\d\s().-]{7,}$/.test(value.trim());
-
-const normalizePhone = (raw: string): string => {
-  const digits = raw.replace(/\D/g, "");
-  if (raw.trim().startsWith("+")) return `+${digits}`;
-  if (digits.length >= 12 && digits.startsWith("55")) {
-    const withoutCountry = digits.slice(2);
-    if (withoutCountry.length === 10) {
-      const ddd = withoutCountry.slice(0, 2);
-      const rest = withoutCountry.slice(2);
-      return `+55${ddd}9${rest}`;
-    }
-    return `+${digits}`;
-  }
-  if (digits.length === 10 || digits.length === 11) return `+55${digits}`;
-  return `+${digits}`;
-};
-
-type Recipient = { phone: string; name?: string };
-
-const recipientLabel = (recipient: Recipient): string =>
-  recipient.name ? `${recipient.phone} (${recipient.name})` : recipient.phone;
-
-const resolveRecipient = async (
-  to: string,
-  apiKey?: string,
-): Promise<Recipient | { error: string }> => {
-  if (looksLikePhone(to)) return { phone: normalizePhone(to) };
-  const response = await apiGet("/v1/contacts", {
-    tokenOverride: apiKey,
-    params: { q: to, page: 0, size: 5 },
-    toolName: "send_whatsapp",
-  });
-  const contacts: Array<{ name?: string; phone?: string }> = response.data?.contacts ?? [];
-  const named = contacts.filter((c) => c.phone);
-  if (named.length === 0) {
-    return { error: `Não achei nenhum contato chamado "${to}". Passe o número direto ou salve o contato com save_contacts.` };
-  }
-  if (named.length > 1) {
-    const options = named.map((c) => `${c.name} (${c.phone})`).join(", ");
-    return { error: `"${to}" casa com mais de um contato: ${options}. Use o número específico.` };
-  }
-  return { phone: normalizePhone(named[0].phone!), name: named[0].name };
 };
 
 const fetchApprovedTemplateNames = async (apiKey?: string): Promise<string[]> => {
@@ -110,7 +60,7 @@ const windowClosedGuidance = async (recipient: Recipient, apiKey?: string): Prom
   return [
     `Não enviei pra ${who}: a janela de 24h está fechada, então texto livre não passa pela Meta.`,
     `Templates aprovados que você pode usar: ${approved.slice(0, 10).join(", ")}.`,
-    `Me diga qual encaixa (e as variáveis) que eu envio via send_message, ou bora aprovar um template novo pra esse caso com create_template.`,
+    `Me diga qual encaixa (e as variáveis) que eu envio via send_template, ou bora aprovar um template novo pra esse caso com create_template.`,
   ].join(" ");
 };
 
@@ -148,22 +98,118 @@ const registerSendWhatsapp = (server: McpServer) => {
   );
 };
 
+const sendTemplate = async (
+  phone: string,
+  templateName: string,
+  variables: string[],
+  from: string | undefined,
+  apiKey?: string,
+) => {
+  const body: Record<string, unknown> = { receiver: phone, templateName, variables, type: "template" };
+  if (from) body.sender = from;
+  const response = await apiPost("/v1/messages", body, { tokenOverride: apiKey, toolName: "send_template" });
+  return response.data ?? {};
+};
+
+const registerSendTemplate = (server: McpServer) => {
+  server.tool(
+    "send_template",
+    "Manda um template APROVADO pra UMA pessoa, preenchendo as variáveis ({{1}}, {{2}}...) posicionalmente. É o jeito de falar quando a janela de 24h está fechada (a Meta só aceita template fora dela) OU quando você quer uma mensagem estruturada com variáveis. Você passa pra quem (número ou nome), o nome do template e os valores das variáveis na ordem. Pra texto livre dentro da janela, use send_whatsapp. Pra vários destinatários, use broadcast.",
+    {
+      to: z.string().describe("Número (qualquer formato) ou nome de um contato salvo."),
+      templateName: z.string().describe("Nome de um template aprovado (não o ID). Veja os seus em arara://templates/approved."),
+      variables: z
+        .array(z.string())
+        .optional()
+        .describe("Valores das variáveis na ordem: ['João', '#12345']. Preenchem {{1}}, {{2}}... Omita se o template não tem variável."),
+      from: z.string().optional().describe("Número de origem em E.164. Omita pra usar o padrão da organização."),
+      apiKey: z.string().optional().describe("Arara API key. Cai pro ARARA_API_KEY do ambiente."),
+    },
+    async ({ to, templateName, variables, from, apiKey }) => {
+      let recipient: Recipient | { error: string };
+      try {
+        recipient = await resolveRecipient(to, apiKey);
+      } catch (error) {
+        return errorResponse(`Não consegui resolver o destinatário: ${readBackendError(error).message}`);
+      }
+      if ("error" in recipient) return errorResponse(recipient.error);
+
+      try {
+        const data = await sendTemplate(recipient.phone, templateName, variables ?? [], from, apiKey);
+        const cost = Number(data.cost ?? 0).toFixed(2);
+        return successResponse(
+          `Template '${templateName}' enviado pra ${recipientLabel(recipient)}. Custo R$ ${cost}. Acompanhe a entrega com check_status (messageId: ${data.id ?? "N/A"}).`,
+        );
+      } catch (error) {
+        return errorResponse(`Não enviei pra ${recipientLabel(recipient)}: ${readBackendError(error).message}`);
+      }
+    },
+  );
+};
+
+type ResolvedContact = { phone: string; variables: string[] };
+
+// Cada destinatário do broadcast é ou uma string (número/nome, usa as variáveis globais)
+// ou um objeto { to, variables } pra personalizar as variáveis daquela pessoa —
+// é assim que se manda "Oi {{1}}" com o nome de cada um numa campanha só.
+const broadcastEntrySchema = z.union([
+  z.string(),
+  z.object({
+    to: z.string().describe("Número (qualquer formato) ou nome de contato salvo."),
+    variables: z
+      .array(z.string())
+      .describe("Variáveis SÓ desta pessoa, na ordem: {{1}}, {{2}}... Ex: ['João', '#12345']."),
+  }),
+]);
+
+type BroadcastEntry = z.infer<typeof broadcastEntrySchema>;
+
+const resolveContacts = async (
+  entries: BroadcastEntry[],
+  globalVariables: string[],
+  apiKey?: string,
+): Promise<{ valid: ResolvedContact[]; failed: string[] }> => {
+  const resolved = await Promise.all(
+    entries.map(async (entry) => {
+      const to = typeof entry === "string" ? entry : entry.to;
+      const variables = typeof entry === "string" ? globalVariables : entry.variables;
+      try {
+        const r = await resolveRecipient(to, apiKey);
+        if ("error" in r) return { error: to };
+        return { phone: r.phone, variables };
+      } catch {
+        return { error: to };
+      }
+    }),
+  );
+  const valid = resolved.filter((r): r is ResolvedContact => "phone" in r);
+  const failed = resolved.filter((r): r is { error: string } => "error" in r).map((r) => r.error);
+  return { valid, failed };
+};
+
 const registerBroadcast = (server: McpServer) => {
   server.tool(
     "broadcast",
-    "Manda um template aprovado pra várias pessoas de uma vez. Disparo em massa é quase sempre fora da janela de 24h, então a Meta exige template — você escolhe um aprovado, a Arara resolve números/nomes e dispara. Não tem template aprovado? Use check com a lista vazia e aprove um com create_template.",
+    "Manda um template aprovado pra várias pessoas de uma vez. Disparo em massa é quase sempre fora da janela de 24h, então a Meta exige template — você escolhe um aprovado, a Arara resolve números/nomes e dispara. Variáveis: o mesmo valor pra todos vai em 'variables'; valor por pessoa (ex: nome de cada um em {{1}}) vai como objeto {to, variables} dentro de 'to'. Não tem template aprovado? Aprove um com create_template.",
     {
       templateName: z.string().describe("Nome de um template aprovado (não o ID)."),
-      to: z.array(z.string()).min(1).max(MAX_BROADCAST).describe("Lista de números (qualquer formato) ou nomes de contatos salvos."),
-      variables: z.array(z.string()).optional().describe("Variáveis posicionais aplicadas a TODOS os destinatários, ex: ['promo de junho']. Para variáveis por pessoa, use o dashboard."),
+      to: z
+        .array(broadcastEntrySchema)
+        .min(1)
+        .max(MAX_BROADCAST)
+        .describe(
+          "Destinatários. Cada item é um número/nome (string) OU um objeto {to, variables} pra personalizar as variáveis daquela pessoa.",
+        ),
+      variables: z
+        .array(z.string())
+        .optional()
+        .describe("Variáveis posicionais aplicadas aos destinatários passados como string, ex: ['promo de junho']. Ignorada pra quem veio como {to, variables}."),
       name: z.string().optional().describe("Nome da campanha no dashboard. Omita pra gerar automático."),
       from: z.string().optional().describe("Número de origem em E.164. Omita pra usar o padrão da organização."),
       apiKey: z.string().optional(),
     },
     async ({ templateName, to, variables, name, from, apiKey }) => {
-      const resolved = await Promise.all(to.map((entry) => resolveRecipient(entry, apiKey).catch(() => ({ error: entry }))));
-      const valid = resolved.filter((r): r is Recipient => "phone" in r);
-      const failed = resolved.filter((r): r is { error: string } => "error" in r).map((r) => r.error);
+      const { valid, failed } = await resolveContacts(to, variables ?? [], apiKey);
       if (valid.length === 0) {
         return errorResponse(`Não disparei: nenhum destinatário válido. Não resolvi: ${failed.join(", ")}`);
       }
@@ -172,7 +218,7 @@ const registerBroadcast = (server: McpServer) => {
         const payload: Record<string, unknown> = {
           name: name ?? `Broadcast ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
           templateName,
-          contacts: valid.map((r) => ({ to: r.phone, variables: variables ?? [] })),
+          contacts: valid.map((c) => ({ to: c.phone, variables: c.variables })),
         };
         if (from) payload.sender = from;
         const response = await apiPost("/v1/campaigns", payload, { tokenOverride: apiKey, toolName: "broadcast" });
@@ -249,11 +295,16 @@ const registerBroadcastAb = (server: McpServer) => {
       templateName: z.string().describe("Template da variante A (o principal)."),
       variantBTemplateName: z.string().describe("Template da variante B (a copy que compete com a A)."),
       to: z
-        .array(z.string())
+        .array(broadcastEntrySchema)
         .min(1)
         .max(MAX_BROADCAST)
-        .describe("Lista de números (qualquer formato) ou nomes de contatos salvos."),
-      variables: z.array(z.string()).optional().describe("Variáveis posicionais aplicadas a TODOS, ex: ['promo de junho']."),
+        .describe(
+          "Destinatários. Cada item é um número/nome (string) OU um objeto {to, variables} pra personalizar as variáveis daquela pessoa.",
+        ),
+      variables: z
+        .array(z.string())
+        .optional()
+        .describe("Variáveis posicionais aplicadas aos destinatários passados como string, ex: ['promo de junho']. Ignorada pra quem veio como {to, variables}."),
       name: z.string().optional().describe("Nome da campanha no dashboard. Omita pra gerar automático."),
       samplePct: z.number().min(1).max(99).optional().describe("% dos leads que entra no teste. Default 20."),
       decisionWindowMinutes: z.number().min(1).optional().describe("Minutos até decidir a vencedora. Default 240 (4h)."),
@@ -278,9 +329,7 @@ const registerBroadcastAb = (server: McpServer) => {
       from,
       apiKey,
     }) => {
-      const resolved = await Promise.all(to.map((entry) => resolveRecipient(entry, apiKey).catch(() => ({ error: entry }))));
-      const valid = resolved.filter((r): r is Recipient => "phone" in r);
-      const failed = resolved.filter((r): r is { error: string } => "error" in r).map((r) => r.error);
+      const { valid, failed } = await resolveContacts(to, variables ?? [], apiKey);
       if (valid.length === 0) {
         return errorResponse(`Não disparei: nenhum destinatário válido. Não resolvi: ${failed.join(", ")}`);
       }
@@ -291,7 +340,7 @@ const registerBroadcastAb = (server: McpServer) => {
         const payload: Record<string, unknown> = {
           name: name ?? `A/B ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
           templateName,
-          contacts: valid.map((r) => ({ to: r.phone, variables: variables ?? [] })),
+          contacts: valid.map((c) => ({ to: c.phone, variables: c.variables })),
           abTest: {
             variantBTemplateName,
             metric: metric ?? "CLICKED",
@@ -323,6 +372,7 @@ const registerBroadcastAb = (server: McpServer) => {
 
 export const registerSendTool = (server: McpServer) => {
   registerSendWhatsapp(server);
+  registerSendTemplate(server);
   registerBroadcast(server);
   registerBroadcastAb(server);
   registerCheckStatus(server);
