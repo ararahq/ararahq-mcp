@@ -287,7 +287,7 @@ export const registerAllResources = (server: McpServer): void => {
     "arara://conversations/recent",
     {
       title: "Recent conversations",
-      description: "Latest WhatsApp conversations with status and last interaction. Read this to triage the inbox or see who is inside the 24h window.",
+      description: "Latest WhatsApp conversations with status and last interaction (metadata only: phone, name, 24h window, lead score). Lead score/summary may be null when the Brain qualifier hasn't run — don't rely on them. To read what each person actually WROTE — to tell real interest from an AI auto-reply — pass their 'customerPhone' to the read_conversation tool, which reads the raw message timeline (no Brain, no Pro plan needed).",
       mimeType: "application/json",
     },
     async (uri) => {
@@ -296,7 +296,7 @@ export const registerAllResources = (server: McpServer): void => {
           params: { page: 0, size: 30 },
           toolName: "resource:conversations",
         });
-        const items: any[] = response.data?.data ?? response.data ?? [];
+        const items: any[] = response.data?.content ?? response.data?.data ?? response.data ?? [];
         return {
           contents: [{
             uri: uri.toString(),
