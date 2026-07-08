@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
 import { sendTelemetry } from "./telemetry.js";
 import { getAraraToken, forceRefreshToken } from "./auth.js";
@@ -67,6 +68,12 @@ const execute = async <T>(
   data?: unknown,
 ): Promise<AxiosResponse<T>> => {
   const startTime = Date.now();
+
+  // A API exige Idempotency-Key em requests mutantes; gera uma vez e
+  // reusa em todos os retries pra dedupe funcionar do lado do servidor.
+  if (method !== "get" && !opts.idempotencyKey) {
+    opts = { ...opts, idempotencyKey: randomUUID() };
+  }
 
   const initialToken = await getAraraToken(opts.tokenOverride);
   if (!initialToken) throw new MissingAuthError();
@@ -144,6 +151,7 @@ export const apiPostMultipart = async <T = any>(
   opts: RequestOpts = {},
 ): Promise<AxiosResponse<T>> => {
   const startTime = Date.now();
+  if (!opts.idempotencyKey) opts = { ...opts, idempotencyKey: randomUUID() };
   const token = await getAraraToken(opts.tokenOverride);
   if (!token) throw new MissingAuthError();
   try {

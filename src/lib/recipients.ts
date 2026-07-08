@@ -7,7 +7,11 @@ export const readBackendError = (error: unknown): BackendError => {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data as Record<string, unknown> | undefined;
     const nested = (data?.error as Record<string, unknown> | undefined)?.message;
-    const message = (nested as string) || (data?.message as string) || (data?.error as string) || error.message;
+    const candidate = nested ?? data?.message ?? data?.error ?? error.message;
+    // Corpo de erro nem sempre traz strings (ex: 500 do Spring) —
+    // sem a coerção, o caller imprime "[object Object]".
+    const message =
+      typeof candidate === "string" ? candidate : JSON.stringify(candidate ?? error.message);
     return { status: error.response?.status, message };
   }
   return { message: String(error) };

@@ -17,7 +17,7 @@ const MAX_BROADCAST = 1000;
 
 const isWindowClosed = (err: BackendError): boolean => {
   if (err.status !== 422) return false;
-  const lower = err.message.toLowerCase();
+  const lower = String(err.message ?? "").toLowerCase();
   return WINDOW_CLOSED_HINTS.some((hint) => lower.includes(hint));
 };
 
