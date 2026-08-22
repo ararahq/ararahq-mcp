@@ -26,9 +26,6 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
-      - name: Use an OIDC-compatible npm CLI
-        run: npm install --global npm@12.0.2
-
       - name: Install native build dependency
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev
 
@@ -37,6 +34,9 @@ jobs:
 
       - name: Verify
         run: npm run check
+
+      - name: Use an OIDC-compatible npm CLI
+        run: npm install --global npm@12.0.2
 
       - name: Publish se a versão for nova
         run: |
