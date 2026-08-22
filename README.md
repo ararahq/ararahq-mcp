@@ -2,7 +2,7 @@
 
 Official Model Context Protocol server for operating AraraHQ Atendimento across support, billing and scheduling.
 
-Version 5 is a clean break from the legacy CPaaS-oriented server. Node.js is the only canonical implementation, OAuth is the authentication boundary, and the public repository is [`ararahq/mcp`](https://github.com/ararahq/mcp).
+Version 5 is a clean break from the legacy CPaaS-oriented server. Node.js is the only canonical implementation, OAuth is the authentication boundary, and both the npm scope and public repository are owned by AraraHQ: [`@ararahq/mcp`](https://www.npmjs.com/package/@ararahq/mcp) and [`ararahq/mcp`](https://github.com/ararahq/mcp).
 
 ## What it exposes
 
@@ -19,8 +19,8 @@ Every tool returns both human-readable content and stable structured content. Wr
 Requires Node.js 20 or newer.
 
 ```bash
-npx -y ararahq-mcp login
-npx -y ararahq-mcp status
+npx -y @ararahq/mcp login
+npx -y @ararahq/mcp status
 ```
 
 The device authorization flow opens AraraHQ in the browser. Access and refresh tokens are stored in the operating-system keychain, never in a project file or client configuration.
@@ -32,7 +32,7 @@ Configure an MCP client with stdio:
   "mcpServers": {
     "ararahq": {
       "command": "npx",
-      "args": ["-y", "ararahq-mcp", "--stdio"]
+      "args": ["-y", "@ararahq/mcp", "--stdio"]
     }
   }
 }
@@ -41,9 +41,9 @@ Configure an MCP client with stdio:
 Useful diagnostics:
 
 ```bash
-npx -y ararahq-mcp doctor
-npx -y ararahq-mcp tools
-npx -y ararahq-mcp logout
+npx -y @ararahq/mcp doctor
+npx -y @ararahq/mcp tools
+npx -y @ararahq/mcp logout
 ```
 
 ## Hosted transport
@@ -83,6 +83,8 @@ npm pack --dry-run
 ```
 
 The server defaults to stdio. Use `MCP_TRANSPORT=http npm start` for Streamable HTTP. Override the API only for controlled environments with `ARARA_API_URL`.
+
+The former unscoped package `ararahq-mcp` is the frozen v4 distribution. New installations and every v5 release use `@ararahq/mcp`.
 
 ## Security
 

@@ -20,7 +20,7 @@ runtime:
   command: npx
   args:
     - "-y"
-    - "ararahq-mcp"
+    - "@ararahq/mcp"
 
 config:
   type: object

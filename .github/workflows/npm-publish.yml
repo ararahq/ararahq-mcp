@@ -1,14 +1,9 @@
-name: Publish to npm
+name: Publish @ararahq/mcp to npm
 
-# Publica no npm sempre que a versão do package.json mudar na main.
-# É idempotente: se a versão já está publicada, não faz nada — então
-# push de código sem bump não republica. Bumpou a versão → publica.
+# Manual by design. The first @ararahq/mcp version must be published interactively
+# to create the package. After that, npm Trusted Publishing authorizes this workflow.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "package.json"
 
 permissions:
   contents: read
