@@ -1,337 +1,120 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { apiGet, extractError } from "../lib/api.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { apiRequest } from "../lib/api.js";
+import {
+  coverageSchema,
+  identitySchema,
+  numbersSchema,
+  planSchema,
+  routineSchema,
+  templatesSchema,
+  todaySchema,
+} from "../lib/schemas.js";
+import { z } from "zod";
 
-const safeJson = (data: unknown): string => {
-  try { return JSON.stringify(data, null, 2); } catch { return String(data); }
+const json = (value: unknown): string => JSON.stringify(value, null, 2);
+const routinesResponseSchema = z.object({ data: z.array(routineSchema) });
+
+const registerJsonResource = (
+  server: McpServer,
+  name: string,
+  uri: string,
+  title: string,
+  description: string,
+  loader: () => Promise<unknown>,
+): void => {
+  server.registerResource(
+    name,
+    uri,
+    { title, description, mimeType: "application/json" },
+    async (resourceUri) => {
+      try {
+        return {
+          contents: [
+            {
+              uri: resourceUri.toString(),
+              mimeType: "application/json",
+              text: json(await loader()),
+            },
+          ],
+        };
+      } catch {
+        return {
+          contents: [
+            {
+              uri: resourceUri.toString(),
+              mimeType: "application/json",
+              text: json({
+                error: { code: "RESOURCE_UNAVAILABLE", message: "Resource could not be loaded." },
+              }),
+            },
+          ],
+        };
+      }
+    },
+  );
 };
 
-const errorContent = (uri: URL, error: unknown) => ({
-  contents: [{
-    uri: uri.toString(),
-    mimeType: "text/plain",
-    text: `Failed to load resource: ${extractError(error)}`,
-  }],
-});
-
 export const registerAllResources = (server: McpServer): void => {
-  server.registerResource(
+  registerJsonResource(
+    server,
     "organization",
-    "arara://organization/me",
-    {
-      title: "Current organization",
-      description: "Name, plan, consumption, primary number of the authenticated org. Read this before any decision that depends on plan limits.",
-      mimeType: "application/json",
-    },
-    async (uri) => {
-      try {
-        const response = await apiGet("/v1/organizations/me/plan", { toolName: "resource:org" });
-        return {
-          contents: [{
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: safeJson(response.data),
-          }],
-        };
-      } catch (error) {
-        return errorContent(uri, error);
-      }
+    "arara://organization",
+    "Organization",
+    "Authenticated identity and current AraraHQ plan.",
+    async () => {
+      const [identity, plan] = await Promise.all([
+        apiRequest("/auth/me", { schema: identitySchema }),
+        apiRequest("/v1/organizations/me/plan", { schema: planSchema }),
+      ]);
+      return { identity, plan };
     },
   );
-
-  server.registerResource(
-    "wallet_balance",
-    "arara://wallet/balance",
-    {
-      title: "Wallet balance",
-      description: "Current wallet balance in BRL. Refresh before estimating campaign cost or running batches.",
-      mimeType: "application/json",
-    },
-    async (uri) => {
-      try {
-        const response = await apiGet("/dashboard/wallet/balance", { toolName: "resource:wallet" });
-        const data = response.data ?? {};
-        const balance = data.balance ?? data;
-        return {
-          contents: [{
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: safeJson({ balanceBrl: Number(balance) }),
-          }],
-        };
-      } catch (error) {
-        return errorContent(uri, error);
-      }
+  registerJsonResource(
+    server,
+    "operation_health",
+    "arara://operation/health",
+    "Operation health",
+    "Today, channel health and published Atendimento routines.",
+    async () => {
+      const [today, numbers, routines] = await Promise.all([
+        apiRequest("/v1/operation/today", { schema: todaySchema }),
+        apiRequest("/v1/organizations/me/numbers", { schema: numbersSchema }),
+        apiRequest("/v1/operation/routines", { schema: routinesResponseSchema }),
+      ]);
+      return {
+        today,
+        channels: numbers,
+        publishedRoutines: routines.data.filter((routine) => routine.published),
+      };
     },
   );
-
-  server.registerResource(
-    "templates_approved",
+  registerJsonResource(
+    server,
+    "approved_templates",
     "arara://templates/approved",
-    {
-      title: "Approved templates",
-      description: "All templates ready to use (status APPROVED). Read this to pick a template for broadcast, or to answer send_whatsapp when the 24h window is closed.",
-      mimeType: "application/json",
-    },
-    async (uri) => {
-      try {
-        const response = await apiGet("/v1/templates", {
-          params: { limit: 100 },
-          toolName: "resource:templates",
-        });
-        const all: any[] = response.data?.data ?? response.data ?? [];
-        const approved = all.filter((t: any) => t.status === "APPROVED");
-        return {
-          contents: [{
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: safeJson(approved.map((t: any) => ({
-              id: t.id,
-              name: t.name,
-              category: t.category,
-              language: t.language,
-            }))),
-          }],
-        };
-      } catch (error) {
-        return errorContent(uri, error);
-      }
+    "Approved templates",
+    "Templates that Meta currently allows for sending.",
+    async () => {
+      const templates = await apiRequest("/v1/templates", { schema: templatesSchema });
+      return templates.filter(
+        (template) => template.providerStatus === "APPROVED" && template.availableForSending,
+      );
     },
   );
-
-  server.registerResource(
-    "numbers",
-    "arara://numbers",
-    {
-      title: "WhatsApp numbers",
-      description: "Numbers assigned to this org with status and default flag. Useful to pick a `from` number for send_whatsapp or broadcast.",
-      mimeType: "application/json",
-    },
-    async (uri) => {
-      try {
-        const response = await apiGet("/v1/organizations/me/numbers", { toolName: "resource:numbers" });
-        return {
-          contents: [{
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: safeJson(response.data),
-          }],
-        };
-      } catch (error) {
-        return errorContent(uri, error);
-      }
-    },
+  registerJsonResource(
+    server,
+    "channels",
+    "arara://channels",
+    "WhatsApp channels",
+    "Configured numbers and slot state for this organization.",
+    () => apiRequest("/v1/organizations/me/numbers", { schema: numbersSchema }),
   );
-
-  server.registerResource(
-    "numbers_health",
-    "arara://numbers/health",
-    {
-      title: "Numbers health snapshot",
-      description: "Quality Rating, Messaging Tier and recent volume for every number, with advisories when a number is degraded or capped. Read this before dispatching a large campaign.",
-      mimeType: "application/json",
-    },
-    async (uri) => {
-      try {
-        const response = await apiGet("/v1/organizations/me/numbers", { toolName: "resource:numbers_health" });
-        const numbers: any[] = response.data?.data ?? response.data ?? [];
-        const summary = numbers.map((n: any) => {
-          const quality = String(n.qualityScore ?? "UNKNOWN");
-          const tier = String(n.messagingTier ?? "UNKNOWN");
-          const advisories: string[] = [];
-          if (quality === "LOW" || quality === "FLAGGED") {
-            advisories.push("quality_degraded");
-          }
-          if (tier === "TIER_1K" || tier === "UNKNOWN") {
-            advisories.push("low_tier_warming_needed");
-          }
-          return {
-            id: n.id,
-            phoneNumber: n.phoneNumber,
-            alias: n.alias,
-            isDefault: n.isDefault,
-            qualityScore: quality,
-            messagingTier: tier,
-            verifiedAt: n.verifiedAt,
-            lastHealthCheckAt: n.lastHealthCheckAt,
-            messagesLast7d: n.messagesLast7d ?? 0,
-            messagesLast30d: n.messagesLast30d ?? 0,
-            advisories,
-          };
-        });
-        const degraded = summary.filter((s) => s.advisories.length > 0).length;
-        return {
-          contents: [{
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: safeJson({
-              totalNumbers: summary.length,
-              degraded,
-              numbers: summary,
-            }),
-          }],
-        };
-      } catch (error) {
-        return errorContent(uri, error);
-      }
-    },
-  );
-
-  server.registerResource(
-    "campaigns_recent",
-    "arara://campaigns/recent",
-    {
-      title: "Recent campaigns",
-      description: "Latest 10 campaigns with status and counts. Use to summarize recent activity without calling list_campaigns.",
-      mimeType: "application/json",
-    },
-    async (uri) => {
-      try {
-        const response = await apiGet("/v1/campaigns", {
-          params: { page: 0, size: 10 },
-          toolName: "resource:campaigns",
-        });
-        const items: any[] = response.data?.content ?? response.data?.data ?? response.data ?? [];
-        return {
-          contents: [{
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: safeJson(items.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              status: c.status,
-              templateName: c.templateName,
-              sent: c.sentCount ?? 0,
-              total: c.totalMessages ?? 0,
-              cost: Number(c.totalCost ?? 0),
-            }))),
-          }],
-        };
-      } catch (error) {
-        return errorContent(uri, error);
-      }
-    },
-  );
-
-  server.registerResource(
-    "recovery_funnel",
-    "arara://recovery/funnel",
-    {
-      title: "Recovery funnel snapshot",
-      description: "Recent recovery ingests grouped by status (PROCESSED/FAILED/SKIPPED). Quick read of how the Arara Recovery feature is performing this week.",
-      mimeType: "application/json",
-    },
-    async (uri) => {
-      try {
-        const [endpoint, ingests] = await Promise.all([
-          apiGet("/v1/recovery/endpoint", { toolName: "resource:recovery" }),
-          apiGet("/v1/recovery/ingests", { params: { page: 0, size: 100 }, toolName: "resource:recovery" }),
-        ]);
-        const items: any[] = ingests.data?.content ?? [];
-        const grouped: Record<string, number> = {};
-        for (const it of items) {
-          const status = it.status ?? "UNKNOWN";
-          grouped[status] = (grouped[status] ?? 0) + 1;
-        }
-        return {
-          contents: [{
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: safeJson({
-              endpoint: {
-                active: endpoint.data?.active,
-                code: endpoint.data?.code,
-              },
-              recentIngests: {
-                total: items.length,
-                byStatus: grouped,
-              },
-            }),
-          }],
-        };
-      } catch (error) {
-        return errorContent(uri, error);
-      }
-    },
-  );
-
-  server.registerResource(
-    "contacts_recent",
-    "arara://contacts/recent",
-    {
-      title: "Recent contacts",
-      description: "Latest saved contacts (name + phone). Read this to resolve who to message or to confirm a contact exists before calling send_whatsapp by name.",
-      mimeType: "application/json",
-    },
-    async (uri) => {
-      try {
-        const response = await apiGet("/v1/contacts", {
-          params: { page: 0, size: 50 },
-          toolName: "resource:contacts",
-        });
-        const contacts: any[] = response.data?.contacts ?? [];
-        return {
-          contents: [{
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: safeJson(contacts.map((c: any) => ({ id: c.id, name: c.name, phone: c.phone, email: c.email }))),
-          }],
-        };
-      } catch (error) {
-        return errorContent(uri, error);
-      }
-    },
-  );
-
-  server.registerResource(
-    "conversations_recent",
-    "arara://conversations/recent",
-    {
-      title: "Recent conversations",
-      description: "Latest WhatsApp conversations with status and last interaction (metadata only: phone, name, 24h window, lead score). Lead score/summary may be null when the Brain qualifier hasn't run — don't rely on them. To read what each person actually WROTE — to tell real interest from an AI auto-reply — pass their 'customerPhone' to the read_conversation tool, which reads the raw message timeline (no Brain, no Pro plan needed).",
-      mimeType: "application/json",
-    },
-    async (uri) => {
-      try {
-        const response = await apiGet("/v1/conversations", {
-          params: { page: 0, size: 30 },
-          toolName: "resource:conversations",
-        });
-        const items: any[] = response.data?.content ?? response.data?.data ?? response.data ?? [];
-        return {
-          contents: [{
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: safeJson(items),
-          }],
-        };
-      } catch (error) {
-        return errorContent(uri, error);
-      }
-    },
-  );
-
-  server.registerResource(
-    "opt_outs",
-    "arara://opt-outs",
-    {
-      title: "Opted-out contacts",
-      description: "Every phone currently opted out from this org. Read before a broadcast to confirm you are not about to message someone who unsubscribed.",
-      mimeType: "application/json",
-    },
-    async (uri) => {
-      try {
-        const response = await apiGet("/v1/opt-outs", { toolName: "resource:opt_outs" });
-        const items: any[] = response.data?.items ?? [];
-        return {
-          contents: [{
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: safeJson({ total: response.data?.total ?? items.length, items }),
-          }],
-        };
-      } catch (error) {
-        return errorContent(uri, error);
-      }
-    },
+  registerJsonResource(
+    server,
+    "coverage",
+    "arara://coverage",
+    "Service coverage",
+    "Working hours and after-hours policy for Atendimento.",
+    () => apiRequest("/v1/operation/coverage", { schema: coverageSchema }),
   );
 };

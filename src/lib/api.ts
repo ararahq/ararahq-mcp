@@ -1,187 +1,64 @@
-import { randomUUID } from "node:crypto";
-import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
-import { sendTelemetry } from "./telemetry.js";
-import { getAraraToken, forceRefreshToken } from "./auth.js";
-import { ARARA_BASE, SERVER_VERSION } from "./constants.js";
+import axios, { type Method } from "axios";
+import type { ZodType, ZodTypeDef } from "zod";
+import { API_TIMEOUT_MS, getApiBaseUrl, MAX_RETRIES } from "../config.js";
+import { getAccessToken } from "../auth/tokens.js";
+import { AraraError, toAraraError } from "./errors.js";
 
-export { ARARA_BASE, SERVER_VERSION };
-
-const DEFAULT_TIMEOUT_MS = 10_000;
-const UPLOAD_TIMEOUT_MS = 30_000;
-const MAX_RETRIES = 3;
-const BASE_BACKOFF_MS = 1_000;
-
-export type RequestOpts = {
-  tokenOverride?: string;
-  params?: Record<string, unknown>;
-  headers?: Record<string, string>;
+type RequestOptions<T> = {
+  method?: Method;
+  body?: unknown;
+  schema: ZodType<T, ZodTypeDef, unknown>;
   idempotencyKey?: string;
-  timeoutMs?: number;
-  toolName?: string;
+  retry?: boolean;
 };
 
-export class MissingAuthError extends Error {
-  constructor() {
-    super(
-      "Not authenticated. Run the `login` tool to authenticate via browser " +
-      "(opens an Arara approval page, no key to copy). Alternative: set " +
-      "ARARA_API_KEY env var with a key from https://new.ararahq.com/dashboard/apikeys " +
-      "(use for CI/headless only — OAuth is recommended for interactive use).",
-    );
-    this.name = "MissingAuthError";
-  }
-}
+const wait = async (milliseconds: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const canRetry = (method: Method, idempotencyKey: string | undefined): boolean =>
+  ["GET", "HEAD", "PUT", "DELETE", "OPTIONS"].includes(method.toUpperCase()) ||
+  idempotencyKey !== undefined;
 
-const isTransient = (error: AxiosError): boolean => {
-  if (!error.response) return true;
-  const status = error.response.status;
-  return status === 429 || status >= 500;
-};
+export const apiRequest = async <T>(path: string, options: RequestOptions<T>): Promise<T> => {
+  const token = await getAccessToken();
+  const method = options.method ?? "GET";
+  const retryAllowed = (options.retry ?? true) && canRetry(method, options.idempotencyKey);
+  let attempt = 0;
 
-const retryDelayMs = (attempt: number, error: AxiosError): number => {
-  const retryAfter = error.response?.headers?.["retry-after"];
-  if (retryAfter) {
-    const parsed = Number(retryAfter);
-    if (Number.isFinite(parsed)) return parsed * 1_000;
-  }
-  return BASE_BACKOFF_MS * 2 ** attempt;
-};
-
-const buildHeaders = (
-  token: string,
-  opts: RequestOpts,
-): Record<string, string> => {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-    ...(opts.headers ?? {}),
-  };
-  if (opts.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey;
-  return headers;
-};
-
-const execute = async <T>(
-  method: "get" | "post" | "put" | "patch" | "delete",
-  url: string,
-  opts: RequestOpts,
-  data?: unknown,
-): Promise<AxiosResponse<T>> => {
-  const startTime = Date.now();
-
-  // A API exige Idempotency-Key em requests mutantes; gera uma vez e
-  // reusa em todos os retries pra dedupe funcionar do lado do servidor.
-  if (method !== "get" && !opts.idempotencyKey) {
-    opts = { ...opts, idempotencyKey: randomUUID() };
-  }
-
-  const initialToken = await getAraraToken(opts.tokenOverride);
-  if (!initialToken) throw new MissingAuthError();
-
-  let currentToken = initialToken;
-  let lastError: AxiosError | undefined;
-  let didRefresh = false;
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const config: AxiosRequestConfig = {
-      method,
-      url,
-      headers: buildHeaders(currentToken, opts),
-      params: opts.params,
-      timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      data,
-    };
-
+  while (true) {
     try {
-      const response = await axios.request<T>(config);
-      void sendTelemetry(ARARA_BASE, SERVER_VERSION, {
-        tool: opts.toolName ?? "unknown",
-        success: true,
-        durationMs: Date.now() - startTime,
+      const response = await axios.request<unknown>({
+        baseURL: getApiBaseUrl(),
+        url: path,
+        method,
+        data: options.body,
+        timeout: API_TIMEOUT_MS,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(options.idempotencyKey === undefined
+            ? {}
+            : { "Idempotency-Key": options.idempotencyKey }),
+        },
       });
-      return response;
+      const parsed = options.schema.safeParse(response.data);
+      if (!parsed.success) {
+        throw new AraraError(
+          "INVALID_API_RESPONSE",
+          "AraraHQ API returned an unexpected response.",
+          502,
+          false,
+        );
+      }
+      return parsed.data;
     } catch (error) {
-      const axiosErr = error as AxiosError;
-      lastError = axiosErr;
-      const status = axiosErr.response?.status;
-
-      if (status === 401 && !didRefresh && !opts.tokenOverride) {
-        const refreshed = await forceRefreshToken();
-        didRefresh = true;
-        if (refreshed) {
-          currentToken = refreshed;
-          continue;
-        }
-      }
-
-      if (attempt < MAX_RETRIES && isTransient(axiosErr)) {
-        await wait(retryDelayMs(attempt, axiosErr));
-        continue;
-      }
-      void sendTelemetry(ARARA_BASE, SERVER_VERSION, {
-        tool: opts.toolName ?? "unknown",
-        success: false,
-        durationMs: Date.now() - startTime,
-        errorCode: status?.toString() ?? axiosErr.code,
-      });
-      throw error;
+      const normalized = toAraraError(error);
+      if (!retryAllowed || !normalized.retryable || attempt >= MAX_RETRIES) throw normalized;
+      const delay =
+        normalized.retryAfterSeconds !== undefined
+          ? normalized.retryAfterSeconds * 1_000
+          : 250 * 2 ** attempt + Math.floor(Math.random() * 100);
+      attempt += 1;
+      await wait(Math.min(delay, 10_000));
     }
   }
-  throw lastError;
-};
-
-export const apiGet = <T = any>(path: string, opts: RequestOpts = {}) =>
-  execute<T>("get", `${ARARA_BASE}${path}`, opts);
-
-export const apiPost = <T = any>(path: string, body: unknown, opts: RequestOpts = {}) =>
-  execute<T>("post", `${ARARA_BASE}${path}`, opts, body);
-
-export const apiPut = <T = any>(path: string, body: unknown, opts: RequestOpts = {}) =>
-  execute<T>("put", `${ARARA_BASE}${path}`, opts, body);
-
-export const apiPatch = <T = any>(path: string, body: unknown, opts: RequestOpts = {}) =>
-  execute<T>("patch", `${ARARA_BASE}${path}`, opts, body);
-
-export const apiDelete = <T = any>(path: string, opts: RequestOpts = {}) =>
-  execute<T>("delete", `${ARARA_BASE}${path}`, opts);
-
-export const apiPostMultipart = async <T = any>(
-  path: string,
-  formData: FormData,
-  opts: RequestOpts = {},
-): Promise<AxiosResponse<T>> => {
-  const startTime = Date.now();
-  if (!opts.idempotencyKey) opts = { ...opts, idempotencyKey: randomUUID() };
-  const token = await getAraraToken(opts.tokenOverride);
-  if (!token) throw new MissingAuthError();
-  try {
-    const response = await axios.post<T>(`${ARARA_BASE}${path}`, formData, {
-      headers: buildHeaders(token, opts),
-      timeout: opts.timeoutMs ?? UPLOAD_TIMEOUT_MS,
-    });
-    void sendTelemetry(ARARA_BASE, SERVER_VERSION, {
-      tool: opts.toolName ?? "unknown",
-      success: true,
-      durationMs: Date.now() - startTime,
-    });
-    return response;
-  } catch (error) {
-    const axiosErr = error as AxiosError;
-    void sendTelemetry(ARARA_BASE, SERVER_VERSION, {
-      tool: opts.toolName ?? "unknown",
-      success: false,
-      durationMs: Date.now() - startTime,
-      errorCode: axiosErr.response?.status?.toString() ?? axiosErr.code,
-    });
-    throw error;
-  }
-};
-
-export const extractError = (error: unknown): string => {
-  if (error instanceof MissingAuthError) return error.message;
-  if (axios.isAxiosError(error)) {
-    const data = error.response?.data as any;
-    return data?.error?.message || data?.error || data?.message || error.message;
-  }
-  return String(error);
 };
