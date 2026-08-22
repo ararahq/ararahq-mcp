@@ -4,8 +4,8 @@
 
 Replace the legacy WhatsApp/CPaaS-oriented MCP surface with one small operational
 surface for Atendimento. The Node repository is the only canonical MCP
-implementation. The package remains `ararahq-mcp`; the canonical source repository
-is `ararahq/mcp`.
+implementation. The canonical npm package is `@ararahq/mcp`; the canonical source
+repository is `ararahq/mcp`. The former `ararahq-mcp` name remains frozen on v4.
 
 ## Product contract
 
@@ -142,7 +142,7 @@ in tests.
 
 ## Migration and rollback
 
-This is a clean major version with no v4 tool aliases. The npm package name remains
-stable. Rollback consists of deploying the previous immutable container/version.
-The legacy `/sse` endpoint is intentionally removed rather than silently sharing
-state with `/mcp`.
+This is a clean major version with no v4 tool aliases. The organization-scoped npm
+package starts at v5 while the former unscoped package remains available as the v4
+rollback path. The legacy `/sse` endpoint is intentionally removed rather than
+silently sharing state with `/mcp`.

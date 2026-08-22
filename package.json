@@ -1,5 +1,5 @@
 {
-  "name": "ararahq-mcp",
+  "name": "@ararahq/mcp",
   "version": "5.0.0",
   "description": "The official AraraHQ MCP server for operating WhatsApp support, billing and scheduling with OAuth.",
   "main": "build/index.js",
