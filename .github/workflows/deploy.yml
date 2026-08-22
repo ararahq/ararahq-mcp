@@ -49,7 +49,7 @@ jobs:
             set -e
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            cd ~/git/mcp
+            cd ~/git/ararahq-mcp
             git pull origin main
 
             docker compose pull mcp
