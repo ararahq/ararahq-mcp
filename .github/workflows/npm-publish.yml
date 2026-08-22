@@ -1,9 +1,14 @@
 name: Publish @ararahq/mcp to npm
 
-# Manual by design. The first @ararahq/mcp version must be published interactively
-# to create the package. After that, npm Trusted Publishing authorizes this workflow.
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
