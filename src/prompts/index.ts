@@ -1,60 +1,40 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+const prompt = (text: string) => ({
+  messages: [{ role: "user" as const, content: { type: "text" as const, text } }],
+});
 
 export const registerAllPrompts = (server: McpServer): void => {
   server.registerPrompt(
-    "send_first_message",
-    {
-      title: "Send a WhatsApp message",
-      description: "Resolve who, send the text, and handle the 24h window gracefully if it is closed.",
-      argsSchema: {
-        to: z.string().describe("Quem receber: número (qualquer formato) ou nome de contato salvo"),
-        message: z.string().describe("O que escrever, em linguagem natural"),
-      },
-    },
-    async ({ to, message }) => ({
-      messages: [{
-        role: "user",
-        content: {
-          type: "text",
-          text: [
-            `Mande uma mensagem de WhatsApp pra **${to}**: "${message}".`,
-            ``,
-            `1. Chame \`send_whatsapp\` com to="${to}" e a mensagem. Ele resolve número, E.164 e nono dígito sozinho.`,
-            `2. Se a janela de 24h estiver fechada, ele vai listar os templates aprovados ou sugerir aprovar um novo. Mostre as opções ao operador e siga a escolha dele — não invente template.`,
-            `3. Reporte o resultado (entregue/custo) ou o próximo passo de forma direta.`,
-          ].join("\n"),
-        },
-      }],
-    }),
+    "triage_today",
+    { description: "Prioritize today's Atendimento queue without taking write actions." },
+    () =>
+      prompt(
+        "Read arara://operation/health, call get_today, and propose a prioritized queue. Show overdue items, unowned conversations, stage, owner, next step and SLA. Do not claim, reply or close anything without explicit confirmation.",
+      ),
   );
-
   server.registerPrompt(
-    "run_broadcast",
-    {
-      title: "Broadcast an approved template",
-      description: "Pick an approved template, confirm the audience, and dispatch a broadcast with operator approval.",
-      argsSchema: {
-        audience: z.string().describe("Quem alcançar (ex: 'clientes de junho', lista de números)"),
-        goal: z.string().describe("O objetivo (ex: 'avisar da promo', 'lembrar do boleto')"),
-      },
-    },
-    async ({ audience, goal }) => ({
-      messages: [{
-        role: "user",
-        content: {
-          type: "text",
-          text: [
-            `Planeje um broadcast. Objetivo: ${goal}. Público: ${audience}.`,
-            ``,
-            `1. Leia \`arara://templates/approved\` e escolha o template que melhor encaixa no objetivo. Se nenhum servir, sugira aprovar um com \`create_template\` e pare.`,
-            `2. Leia \`arara://opt-outs\` e \`arara://wallet/balance\`: não inclua quem deu opt-out e confirme que há saldo.`,
-            `3. Monte a lista de destinatários (números ou nomes salvos) a partir do público.`,
-            `4. Confirme com o operador (template + tamanho da lista) ANTES de disparar. Só então chame \`broadcast\` com o templateName escolhido.`,
-            `5. Reporte campanha criada + custo. Nunca dispare sem aprovação explícita.`,
-          ].join("\n"),
-        },
-      }],
-    }),
+    "draft_reply",
+    { description: "Draft a grounded reply for one conversation." },
+    () =>
+      prompt(
+        "Use find_conversations and get_conversation to understand the selected case. Draft a concise reply consistent with the current stage and next step. Do not call reply_to_conversation until the user explicitly approves the exact text.",
+      ),
+  );
+  server.registerPrompt(
+    "campaign_preflight",
+    { description: "Review a campaign before publication." },
+    () =>
+      prompt(
+        "Call prepare_campaign. Verify the approved template, published Atendimento routine, coverage, audience, variables and schedule. Present the final payload and risks. Do not call publish_campaign without explicit confirmation.",
+      ),
+  );
+  server.registerPrompt(
+    "close_case_review",
+    { description: "Check whether a conversation is ready to close." },
+    () =>
+      prompt(
+        "Load the conversation timeline and its metadata. Confirm owner, outcome, next step and any promised follow-up. Recommend closure only when no unresolved obligation remains. Do not call close_conversation without explicit confirmation.",
+      ),
   );
 };

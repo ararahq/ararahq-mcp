@@ -1,263 +1,100 @@
-# Arara MCP
+# AraraHQ MCP
 
-[![npm](https://img.shields.io/npm/v/ararahq-mcp)](https://www.npmjs.com/package/ararahq-mcp)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-ararahq.com-orange)](https://docs.ararahq.com/mcp-server)
+Official Model Context Protocol server for operating AraraHQ Atendimento across support, billing and scheduling.
 
-Turn Claude Code, Claude Desktop, Cursor, Windsurf or ChatGPT into a WhatsApp operator that knows your customers, your templates, your wallet, and your funnel. Built by [AraraHQ](https://ararahq.com) — Brazilian CPaaS for WhatsApp, homologated by Meta.
+Version 5 is a clean break from the legacy CPaaS-oriented server. Node.js is the only canonical implementation, OAuth is the authentication boundary, and the public repository is [`ararahq/mcp`](https://github.com/ararahq/mcp).
 
-**Say who and what — send_whatsapp does the rest · OAuth login · stdio + SSE**
+## What it exposes
 
----
+- Atendimento: today queue, paginated conversation discovery and timeline, claim, reply and close.
+- Automations: list and inspect configured automations.
+- Campaigns: preflight and idempotent publication tied to a published Atendimento routine.
+- WhatsApp operations: single-message send, delivery lookup, templates, contacts and opt-outs.
+- Context: organization, operational health, approved templates, channels and coverage.
 
-## Install in 30 seconds
+Every tool returns both human-readable content and stable structured content. Write tools carry MCP safety annotations. Credentials never appear in tool inputs or output.
 
-### Claude Code
+## Local installation
 
-```sh
-claude mcp add arara --scope user -- npx -y ararahq-mcp
+Requires Node.js 20 or newer.
+
+```bash
 npx -y ararahq-mcp login
+npx -y ararahq-mcp status
 ```
 
-Browser opens, you approve, the token lands in your OS keychain. Done.
+The device authorization flow opens AraraHQ in the browser. Access and refresh tokens are stored in the operating-system keychain, never in a project file or client configuration.
 
-Prefer doing it inside a conversation? Restart Claude Code and say:
-
-```
-log into arara
-```
-
-### Claude Desktop
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+Configure an MCP client with stdio:
 
 ```json
 {
   "mcpServers": {
-    "arara": {
+    "ararahq": {
       "command": "npx",
-      "args": ["-y", "ararahq-mcp"]
+      "args": ["-y", "ararahq-mcp", "--stdio"]
     }
   }
 }
 ```
 
-Restart Claude Desktop. Type **"log into arara"** in any chat — browser opens, you approve, you're in.
+Useful diagnostics:
 
-### Cursor
-
-Settings → MCP → Add server:
-
-```json
-{
-  "arara": {
-    "command": "npx",
-    "args": ["-y", "ararahq-mcp"]
-  }
-}
+```bash
+npx -y ararahq-mcp doctor
+npx -y ararahq-mcp tools
+npx -y ararahq-mcp logout
 ```
 
-### Windsurf
+## Hosted transport
 
-`.windsurf/mcp.json` at project root:
+The hosted server uses stateless MCP Streamable HTTP at `POST /mcp`. It accepts OAuth bearer tokens only in the `Authorization` header. Query-string credentials, API-key tool arguments, legacy SSE endpoints, permissive CORS and debug endpoints do not exist.
 
-```json
-{
-  "servers": {
-    "arara": {
-      "command": "npx",
-      "args": ["-y", "ararahq-mcp"]
-    }
-  }
-}
+```bash
+MCP_TRANSPORT=http \
+PORT=3333 \
+MCP_PUBLIC_URL=https://mcp.ararahq.com/mcp \
+MCP_ALLOWED_HOSTS=mcp.ararahq.com \
+MCP_ALLOWED_ORIGINS=https://chatgpt.com,https://claude.ai \
+ARARA_OAUTH_ISSUER=https://api.ararahq.com/api \
+npm start
 ```
 
-### Hosted SSE — no local install
+Protected Resource Metadata is served at:
 
-For ChatGPT (Custom GPT), n8n, or any client that speaks SSE:
+- `/.well-known/oauth-protected-resource`
+- `/.well-known/oauth-protected-resource/mcp`
 
-```
-URL:    https://mcp.ararahq.com/sse
-Header: X-Arara-Key: ara_live_xxx
-```
+AraraHQ currently issues installed-client OAuth tokens through its device authorization flow. Hosted clients must supply a valid AraraHQ OAuth bearer token; the MCP does not proxy credentials or mint tokens.
 
-Generate the key at [Dashboard → API Keys](https://ararahq.com/dashboard/apikeys).
+## Tool catalog
 
-### Headless (CI / n8n self-hosted / server)
+`whoami`, `get_today`, `find_conversations`, `get_conversation`, `reply_to_conversation`, `claim_conversation`, `close_conversation`, `list_automations`, `get_automation`, `prepare_campaign`, `publish_campaign`, `send_whatsapp`, `check_message`, `save_contacts`, `create_template`, `get_template_status`, `opt_out`.
 
-Skip OAuth — set the env var and run:
+Campaign publication validates that the Meta template is approved and available, and that its destination routine (`support`, `billing` or `scheduling`) is published. Message acceptance is reported as queued—not delivered—and delivery is checked separately.
 
-```sh
-ARARA_API_KEY=ara_live_xxx npx ararahq-mcp --stdio
-```
+## Development
 
----
-
-## 4 things you can do right now
-
-**1. Ask the LLM:** *"Manda 'oi, tudo bem?' pro +5511999998888."*
-→ Calls `send_whatsapp`. It fixes the number format, sends free text if the 24h window is open, and if it's closed it offers your approved templates instead of failing.
-
-**2. Ask:** *"Dispara o template black_friday pros meus 200 leads."*
-→ Calls `broadcast` with the approved template. Resolves names/numbers and batches the send.
-
-**3. Ask:** *"O João já pode receber mensagem agora?"*
-→ Calls `check_status`. Tells you if the 24h window is open and how long is left.
-
-**4. Ask:** *"O +5511999998888 pediu pra sair da lista."*
-→ Calls `opt_out`. LGPD-safe, idempotent.
-
----
-
-## Why an MCP, not a raw API client?
-
-A raw API client makes you remember endpoints, payload shapes, the E.164 format, the 24h window, template approval state. The MCP collapses that into a minimal surface: you say **who** and **what**, and `send_whatsapp` figures out the rest. You speak Portuguese. The LLM does the rest.
-
----
-
-## Tool index
-
-A small set of intent tools does the work, and read-only data lives in resources (your client loads them automatically, no tool call needed). You say **who** and **what** — the tools handle number format, the 24h window, and template state.
-
-<details>
-<summary><b>Send</b> — 5 tools <i>(the spine)</i></summary>
-
-`send_whatsapp` · `send_template` · `broadcast` · `broadcast_ab` · `check_status`
-
-`send_whatsapp(to, message)` — `to` is a number in any format OR a saved contact name. Fixes E.164 + the Brazilian 9th digit, sends free text when the 24h window is open, and when it's closed it lists your approved templates or helps you approve a new one — it never invents a template. `send_template(to, templateName, variables[])` sends one approved template to one person, filling `{{1}}`, `{{2}}`... positionally — the way to message someone when the 24h window is closed. `broadcast(templateName, to[], variables[])` sends an approved template to many; pass a plain number/name for the same variables for everyone, or `{to, variables}` per recipient to personalize (each person's name in `{{1}}`). `broadcast_ab` does the same with a 2-template A/B test. `check_status` answers "delivered? replied? can I message now?".
-
-</details>
-
-<details>
-<summary><b>Inbox</b> — 1 tool</summary>
-
-`read_conversation`
-
-`read_conversation(to)` reads the actual message content exchanged with a person — what the customer really wrote, not just the metadata in `arara://conversations/recent`. It reads the raw message timeline by phone, so it does **not** depend on the inbox, the Pro plan, a dedicated number, or the Brain qualifier (whose `leadScore`/`leadSummary` are often null). Each line is tagged with who spoke (customer / you) and when, so you can tell real interest from an AI auto-reply.
-
-</details>
-
-<details>
-<summary><b>Contacts</b> — 1 tool</summary>
-
-`save_contacts`
-
-Create/update up to 1000 contacts so you can message by name. Listing/reading contacts is the `arara://contacts/recent` resource.
-
-</details>
-
-<details>
-<summary><b>Templates</b> — 2 tools</summary>
-
-`create_template` · `get_template_status`
-
-Submit a real, fixed-copy template for Meta approval (used when the 24h window is closed) and poll its approval. Your approved templates are the `arara://templates/approved` resource.
-
-</details>
-
-<details>
-<summary><b>Links</b> — 4 tools</summary>
-
-`create_smart_link` · `list_smart_links` · `create_short_link` · `list_short_links`
-
-`create_smart_link(name, phoneNumber, defaultText?)` makes a click-to-chat link + QR that opens WhatsApp on your number with a prefilled text — the destination is always a **number**. `create_short_link(url, name?)` shortens **any URL** into a tracked `ararahq.com/l/CODE` that 302-redirects to the destination and counts every click — use it for a bio link, an ad, or a `utm`-tagged landing page. Both `list_*` tools return the links with per-link click counts.
-
-</details>
-
-<details>
-<summary><b>Compliance</b> — 1 tool</summary>
-
-`opt_out`
-
-Record that a contact unsubscribed (LGPD-safe, idempotent). The current opt-out list is the `arara://opt-outs` resource.
-
-</details>
-
-<details>
-<summary><b>Auth</b> — 3 tools</summary>
-
-`login` · `logout` · `whoami`
-
-OAuth device flow: opens browser, polls until approved, stores token in OS keychain. Never on disk.
-
-</details>
-
-<details>
-<summary><b>Prompts</b> — 2 ready-made flows</summary>
-
-`send_first_message(to, message)` · `run_broadcast(audience, goal)`
-
-Client-side shortcuts: the first walks the send + closed-window flow; the second picks a template from your approved list, excludes opt-outs, checks balance and asks for your approval before dispatching.
-
-</details>
-
-<details>
-<summary><b>Resources</b> — read-only context</summary>
-
-`arara://organization/me` · `arara://wallet/balance` · `arara://templates/approved` · `arara://numbers` · `arara://numbers/health` · `arara://campaigns/recent` · `arara://recovery/funnel` · `arara://contacts/recent` · `arara://conversations/recent` · `arara://opt-outs`
-
-Numbers, wallet, templates, contacts, conversations, opt-outs and health snapshots. The LLM reads these passively to back decisions — they don't clutter tool choice. `conversations/recent` is metadata only; for the actual message content of a conversation, use the `read_conversation` tool.
-
-</details>
-
-> Account config that isn't day-to-day operator work — API keys, business profile, number provisioning, A/B tests, Brain knowledge base, recovery setup — lives in the [dashboard](https://ararahq.com/dashboard), not the agent surface.
-
----
-
-## Authentication
-
-Two modes, picked automatically in this order:
-
-| Mode | When | How |
-|---|---|---|
-| **OAuth (device flow)** | Default for Claude Code, Desktop, Cursor, Windsurf | Run `login`, approve in browser. Token saved to OS keychain. Auto-refresh. |
-| **API key via env** | CI, server, n8n, ChatGPT (SSE), headless | `ARARA_API_KEY=ara_live_xxx` (stdio) or `X-Arara-Key` header (SSE) |
-
-Internal precedence: explicit `apiKey` arg → SSE session key → OAuth keychain → `ARARA_API_KEY` env. If none exist, tools fail with `MissingAuth` and tell you to run `login`.
-
----
-
-## Configuration
-
-```sh
-# OAuth is the default. These are all optional overrides.
-ARARA_API_KEY=ara_live_xxx          # Fallback / headless mode
-ARARA_BASE_URL=https://...          # Override endpoint (default: https://api.ararahq.com/api)
-ARARA_MCP_TELEMETRY=off             # Disable usage telemetry
-PORT=3333                           # SSE mode port (default 3333)
-MCP_TRANSPORT=sse                   # Force SSE instead of stdio
+```bash
+npm ci
+npm run check
+npm audit --omit=dev
+npm pack --dry-run
 ```
 
-Tokens stored via [keytar](https://github.com/atom/node-keytar) — macOS Keychain, Linux Secret Service, Windows Credential Manager. Never on disk in plaintext.
+The server defaults to stdio. Use `MCP_TRANSPORT=http npm start` for Streamable HTTP. Override the API only for controlled environments with `ARARA_API_URL`.
 
----
+## Security
 
-## Local dev
+- OAuth tokens remain server-side and are redacted by design.
+- External HTTP requests have explicit timeouts.
+- Retries are limited to safe methods or requests carrying an idempotency key and honor `Retry-After`.
+- All consumed API payloads are validated before fields are used.
+- Hosted requests are rate-limited and checked against explicit host and origin allowlists.
+- No telemetry is collected by this package.
 
-```sh
-git clone https://github.com/ararahq/ararahq-mcp.git
-cd ararahq-mcp
-npm install
-npm run build
-node build/index.js --stdio          # for Claude Desktop / Code testing
-PORT=3333 node build/index.js        # for SSE testing on localhost
-```
+Report vulnerabilities privately to `security@ararahq.com`.
 
-To wire your local build into Claude Code:
+## License
 
-```sh
-claude mcp add arara --scope user -- node /absolute/path/to/build/index.js --stdio
-```
-
----
-
-## Get help
-
-- Docs: [docs.ararahq.com/mcp-server](https://docs.ararahq.com/mcp-server)
-- Issues: [github.com/ararahq/ararahq-mcp/issues](https://github.com/ararahq/ararahq-mcp/issues)
-- WhatsApp: message any Arara number — yes, we use our own product
-
----
-
-Built in São Paulo · MIT license · © AraraHQ
+MIT © AraraHQ

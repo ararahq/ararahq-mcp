@@ -17,14 +17,17 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Install native build dependency
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev
 
       - name: Install
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Verify
+        run: npm run check
 
       - name: Publish se a versão for nova
         env:
