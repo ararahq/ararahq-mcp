@@ -10,6 +10,8 @@ type RequestOptions<T> = {
   schema: ZodType<T, ZodTypeDef, unknown>;
   idempotencyKey?: string;
   retry?: boolean;
+  /** Extra headers merged into the request (e.g. X-Admin-Secret). Never logged or echoed. */
+  extraHeaders?: Record<string, string>;
 };
 
 const wait = async (milliseconds: number): Promise<void> =>
@@ -38,6 +40,7 @@ export const apiRequest = async <T>(path: string, options: RequestOptions<T>): P
           ...(options.idempotencyKey === undefined
             ? {}
             : { "Idempotency-Key": options.idempotencyKey }),
+          ...options.extraHeaders,
         },
       });
       const parsed = options.schema.safeParse(response.data);
