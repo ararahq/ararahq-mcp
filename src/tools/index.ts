@@ -21,22 +21,22 @@ import {
   templatesSchema,
   todaySchema,
 } from "../lib/schemas.js";
-import { execute, toolOutputSchema } from "../mcp/result.js";
+import { execute, failure, toolOutputSchema } from "../mcp/result.js";
 
-const readOnly = {
+export const readOnly = {
   readOnlyHint: true,
   destructiveHint: false,
   idempotentHint: true,
   openWorldHint: true,
 };
-const write = {
+export const write = {
   readOnlyHint: false,
   destructiveHint: false,
   idempotentHint: false,
   openWorldHint: true,
 };
-const idempotentWrite = { ...write, idempotentHint: true };
-const destructive = {
+export const idempotentWrite = { ...write, idempotentHint: true };
+export const destructive = {
   readOnlyHint: false,
   destructiveHint: true,
   idempotentHint: true,
@@ -48,18 +48,35 @@ const routineKeySchema = z.enum(["support", "billing", "scheduling"]);
 const routinesResponseSchema = z.object({ data: z.array(routineSchema) });
 
 type ToolHandler = (input: Record<string, unknown>) => Promise<unknown>;
-const register = (
+
+/**
+ * Registers a tool with the shared output envelope. An optional [gate] runs before
+ * the handler and refuses the call through the same structured failure envelope.
+ */
+export const register = (
   server: McpServer,
   name: string,
   description: string,
   inputSchema: Record<string, z.ZodTypeAny>,
   annotations: typeof readOnly,
   handler: ToolHandler,
+  gate?: () => Promise<void>,
 ): void => {
+  const wrapped: ToolHandler =
+    gate === undefined
+      ? handler
+      : async (input) => {
+          try {
+            await gate();
+          } catch (error) {
+            return failure(error);
+          }
+          return handler(input);
+        };
   server.registerTool(
     name,
     { description, inputSchema, outputSchema: toolOutputSchema, annotations },
-    handler as never,
+    wrapped as never,
   );
 };
 

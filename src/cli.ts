@@ -4,6 +4,7 @@ import { requestDeviceCode, pollForToken, openBrowser } from "./auth/device-flow
 import { clearToken, loadToken } from "./auth/token-store.js";
 import { identitySchema } from "./lib/schemas.js";
 import { TOOL_NAMES } from "./tools/index.js";
+import { OPERATOR_TOOL_NAMES } from "./tools/operator.js";
 
 const log = (message: string): void => {
   process.stdout.write(`${message}\n`);
@@ -70,6 +71,7 @@ export const runCli = async (command: string): Promise<boolean> => {
   }
   if (command === "tools") {
     TOOL_NAMES.forEach(log);
+    OPERATOR_TOOL_NAMES.forEach(log);
     return true;
   }
   if (command === "--version" || command === "-v") {
